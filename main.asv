@@ -96,6 +96,15 @@ for sc_ind = 1:numel(scenarios)
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
             
             scenario.rx.channel_est = chanEst;
+            
+            if plot_ch 
+                figure;
+                stem([-127:0 1:127], fftshift(abs(ifft(chanEst)).^2));
+                title('Time domain channel response')
+                ylabel('|h[n]|^2')
+                xlabel('n')
+                grid;
+            end
 
             % Data demodulate
             rxData = rx(pktOffset+(ind.HEData(1):ind.HEData(2)),:);
@@ -123,17 +132,7 @@ for sc_ind = 1:numel(scenarios)
             numPacketErrors = numPacketErrors+packetError;
             numPkt = numPkt+1;
         end
-        
-        if plot_ch 
-                temp = zeros(256,1);
-                temp(ofdmInfo.ActiveFFTIndices) = chanEst;
-                figure;
-                stem([-128:0 1:127], fftshift(abs(ifft(temp)).^2));
-                title('Time domain channel response')
-                ylabel('|h[n]|^2')
-                xlabel('n')
-                grid;
-        end
+
         % Calculate packet error rate (PER) at SNR point
         packetErrorRate(isnr) = numPacketErrors/(numPkt-1);
         disp(['MCS ' num2str(cfgHE.MCS) ','...
