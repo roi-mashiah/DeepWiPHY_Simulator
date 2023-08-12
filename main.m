@@ -1,4 +1,5 @@
 clear all;close all;clc
+addpath("helpers\","scenarios\");
 %% load scenarios
 scenario_paths = ["tx_config"];
 scenarios = {};
