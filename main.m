@@ -11,27 +11,28 @@ end
 
 %% global configs and preallocs
 maxNumErrors = 10;   % The maximum number of packet errors at an SNR point
-maxNumPackets = 100; % The maximum number of packets at an SNR point
-snr = 30;
+snr = 35;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
-plot_ch = 1;
+plot_ch = 1;plot_symb = 1;
 
 for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};
     cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
     chanBW = scenario.tx.HE_config.ChannelBandwidth;
+    maxNumPackets = scenario.tx.numPackets;
+
     % Get occupied subcarrier indices and OFDM parameters
     ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
-
+    fs = tgaxChannel.SampleRate;
     % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
     ind = wlanFieldIndices(cfgHE);
-    
+
     for isnr = 1:numSNR
         % Set random substream index per iteration to ensure that each
         % iteration uses a repeatable set of random numbers
-        stream = RandStream('combRecursive','Seed',99);
+        stream = RandStream('combRecursive','Seed',scenario.seed);
         stream.Substream = isnr;
         RandStream.setGlobalStream(stream);
 
@@ -95,7 +96,7 @@ for sc_ind = 1:numel(scenarios)
             rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
             heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain symbols per channel
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
-            
+
             scenario.rx.channel_est = chanEst;
 
             % Data demodulate
@@ -116,36 +117,63 @@ for sc_ind = 1:numel(scenarios)
             % Equalization and STBC combining
             [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);
 
+            % log symbols to calculate SER
+            scenario.rx.data_symbols{numPkt} = eqDataSym;
+
+            if plot_symb
+                ref = scenario.gt{numPkt};
+                figure;
+                subplot(211);
+                plot(1:234,real(ref(:,1)),1:234,real(eqDataSym(:,1)))
+                title("Real - Est vs GT")
+                grid
+
+                subplot(212);
+                plot(1:234,imag(ref(:,1)),1:234,imag(eqDataSym(:,1)))
+                title("Imag - Est vs GT")
+                grid
+
+                mse_avg = 0;
+                for ii =1:size(eqDataSym,2)
+                    mse_avg = mse_avg + sum(abs(ref(:,ii) - eqDataSym(:,ii)).^2)/numel(ref(:,1));
+                end
+                mse_avg = mse_avg/numel(ref,2)
+            end
+
             % Recover data
             rxPSDU = wlanHEDataBitRecover(eqDataSym,nVarEst,csi,cfgHE,'LDPCDecodingMethod','norm-min-sum');
 
             % Determine if any bits are in error, i.e. a packet error
             packetError = ~isequal(txPSDU,rxPSDU);
-            numPacketErrors = numPacketErrors+packetError;
+            if packetError
+                numPacketErrors = numPacketErrors+packetError;
+            end
             numPkt = numPkt+1;
         end
-        
-        if plot_ch 
 
-                temp = zeros(256,1);
-                temp(ofdmInfo.ActiveFFTIndices) = chanEst;
-                figure;
-                subplot(211)
-                stem([-128:0 1:127], fftshift(abs(ifft(temp)).^2));
-                title('Time domain channel response estimation')
-                ylabel('|h[n]|^2')
-                xlabel('n')
-                grid;
 
-                subplot(212)
-                x = zeros(256,1);
-                x(1) = 1;
-                stem([-128:0 1:127], fftshift(abs(tgaxChannel(x)).^2))
-                title('Time domain channel response GT')
-                ylabel('|h[n]|^2')
-                xlabel('n')
-                grid;
+
+        if plot_ch
+            temp = zeros(256,1);
+            temp(ofdmInfo.ActiveFFTIndices) = chanEst;
+            figure;
+            subplot(211)
+            stem([-128:0 1:127], fftshift(abs(ifft(temp)).^2));
+            title('Time domain channel response estimation')
+            ylabel('|h[n]|^2')
+            xlabel('n')
+            grid;
+
+            subplot(212)
+            x = zeros(256,1);
+            x(1) = 1;
+            stem([-128:0 1:127], fftshift(abs(tgaxChannel(x)).^2))
+            title('Time domain channel response GT')
+            ylabel('|h[n]|^2')
+            xlabel('n')
+            grid;
         end
+
         % Calculate packet error rate (PER) at SNR point
         packetErrorRate(isnr) = numPacketErrors/(numPkt-1);
         disp(['MCS ' num2str(cfgHE.MCS) ','...

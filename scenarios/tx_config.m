@@ -1,4 +1,5 @@
 scenario = struct;
+addpath(".\helpers\")
 
 % configure the transmission packet
 cfgHE = wlanHESUConfig;
@@ -29,3 +30,11 @@ tgaxChannel.SampleRate = fs;
 
 scenario.tx.HE_config = cfgHE;
 scenario.tx.tgax_channel = tgaxChannel;
+scenario.tx.numPackets = 10;
+
+% Generate seed
+scenario.seed = round((now - datenum('1/1/2020'))*100);
+
+% Get Ground Truth QAMS
+scenario.gt = create_scenario_gt(scenario);
+
