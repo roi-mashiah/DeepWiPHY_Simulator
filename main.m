@@ -10,11 +10,13 @@ for f = 1:numel(scenario_paths)
 end
 
 %% global configs and preallocs
+save_scenario = 1;
 maxNumErrors = 10;   % The maximum number of packet errors at an SNR point
-snr = 35;
+% snr = 10:35;
+snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
-plot_ch = 1;plot_symb = 1;
+plot_ch = 0; plot_symb = 0; plot_perf=0;
 
 for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};
@@ -122,24 +124,16 @@ for sc_ind = 1:numel(scenarios)
 
             if plot_symb
                 ref = scenario.gt{numPkt};
-                figure;
-                subplot(211);
-                plot(1:234,real(ref(:,1)),1:234,real(eqDataSym(:,1)))
-                title("Real - Est vs GT")
-                grid
-
-                subplot(212);
-                plot(1:234,imag(ref(:,1)),1:234,imag(eqDataSym(:,1)))
-                title("Imag - Est vs GT")
-                grid
-
-                mse_avg = 0;
-                for ii =1:size(eqDataSym,2)
-                    mse_avg = mse_avg + sum(abs(ref(:,ii) - eqDataSym(:,ii)).^2)/numel(ref(:,1));
-                end
-                mse_avg = mse_avg/numel(ref,2)
+                plot_symb_ref(ref,eqDataSym)
             end
-
+            
+            if save_scenario
+                filename = strcat("sc_",datestr(now,"ddmmyy_HHMM"),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
+                if ~exist(".\data","dir")
+                    mkdir(".\data")
+                end
+                save(fullfile("data\",filename),"scenario");
+            end
             % Recover data
             rxPSDU = wlanHEDataBitRecover(eqDataSym,nVarEst,csi,cfgHE,'LDPCDecodingMethod','norm-min-sum');
 
@@ -151,27 +145,8 @@ for sc_ind = 1:numel(scenarios)
             numPkt = numPkt+1;
         end
 
-
-
         if plot_ch
-            temp = zeros(256,1);
-            temp(ofdmInfo.ActiveFFTIndices) = chanEst;
-            figure;
-            subplot(211)
-            stem([-128:0 1:127], fftshift(abs(ifft(temp)).^2));
-            title('Time domain channel response estimation')
-            ylabel('|h[n]|^2')
-            xlabel('n')
-            grid;
-
-            subplot(212)
-            x = zeros(256,1);
-            x(1) = 1;
-            stem([-128:0 1:127], fftshift(abs(tgaxChannel(x)).^2))
-            title('Time domain channel response GT')
-            ylabel('|h[n]|^2')
-            xlabel('n')
-            grid;
+            plot_channel(scenario)
         end
 
         % Calculate packet error rate (PER) at SNR point
@@ -180,15 +155,10 @@ for sc_ind = 1:numel(scenarios)
             ' SNR ' num2str(snr(isnr)) ...
             ' completed after ' num2str(numPkt-1) ' packets,'...
             ' PER:' num2str(packetErrorRate(isnr))]);
+
     end
 
-    figure;
-    semilogy(snr,packetErrorRate,'-*');
-    hold on;
-    grid on;
-    xlabel('SNR (dB)');
-    ylabel('PER');
-    dataStr = arrayfun(@(x)sprintf('MCS %d',x),cfgHE.MCS,'UniformOutput',false);
-    legend(dataStr);
-    title(sprintf('PER for HE Channel %s, %s, %s, PSDULength: %d',tgaxChannel.DelayProfile,cfgHE.ChannelBandwidth,cfgHE.ChannelCoding,cfgHE.APEPLength));
+    if plot_perf
+        plot_performance(snr,packetErrorRate,scenario)
+    end
 end
