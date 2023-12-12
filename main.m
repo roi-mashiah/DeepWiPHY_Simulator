@@ -1,7 +1,7 @@
 clear all;close all;clc
 addpath("helpers\","scenarios\");
 %% load scenarios
-scenario_paths = ["tx_config"];
+scenario_paths = ["tx_config_model_A", "tx_config_model_B","tx_config_model_C"];
 scenarios = {};
 for f = 1:numel(scenario_paths)
     clear scenario
@@ -12,8 +12,8 @@ end
 %% global configs and preallocs
 save_scenario = 1;
 maxNumErrors = 10;   % The maximum number of packet errors at an SNR point
-% snr = 10:35;
-snr = 12:2:20;
+snr = [5, 7.5, 10:5:30];
+% snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
 plot_ch = 0; plot_symb = 0; plot_perf=0;
@@ -27,6 +27,7 @@ for sc_ind = 1:numel(scenarios)
 
     % Get occupied subcarrier indices and OFDM parameters
     ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
+    scenario.tx.ofdmInfo = ofdmInfo;
     fs = tgaxChannel.SampleRate;
     % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
     ind = wlanFieldIndices(cfgHE);
@@ -96,14 +97,17 @@ for sc_ind = 1:numel(scenarios)
 
             % HE-LTF demodulation and channel estimation
             rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
-            heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain symbols per channel
+            heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
-
+            
+            % log HE-LTF data for training, channel estimation for
+            % reference and comparisons
+            scenario.rx.HE_LTF{numPkt} = heltfDemod; 
             scenario.rx.channel_est = chanEst;
 
-            % Data demodulate
+            % Data demodulate - # symbols = # samples / (fftSize + CPSize)
             rxData = rx(pktOffset+(ind.HEData(1):ind.HEData(2)),:);
-            demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);
+            demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);            
 
             % Pilot phase tracking
             demodSym = wlanHETrackPilotError(demodSym,chanEst,cfgHE,'HE-Data');
@@ -116,12 +120,14 @@ for sc_ind = 1:numel(scenarios)
             demodDataSym = demodSym(ofdmInfo.DataIndices,:,:);
             chanEstData = chanEst(ofdmInfo.DataIndices,:,:);
 
+           
+      
             % Equalization and STBC combining
             [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);
 
             % log symbols to calculate SER
             scenario.rx.data_symbols{numPkt} = eqDataSym;
-
+            
             if plot_symb
                 ref = scenario.gt{numPkt};
                 plot_symb_ref(ref,eqDataSym)
