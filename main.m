@@ -118,9 +118,7 @@ for sc_ind = 1:numel(scenarios)
             % Extract data subcarriers from demodulated symbols and channel
             % estimate
             demodDataSym = demodSym(ofdmInfo.DataIndices,:,:);
-            chanEstData = chanEst(ofdmInfo.DataIndices,:,:);
-
-           
+            chanEstData = chanEst(ofdmInfo.DataIndices,:,:);           
       
             % Equalization and STBC combining
             [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);

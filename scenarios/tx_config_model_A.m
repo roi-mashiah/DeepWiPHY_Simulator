@@ -15,9 +15,13 @@ cfgHE.HELTFType = 4;               % HE-LTF compression mode
 cfgHE.ChannelCoding = 'LDPC';      % Channel coding - FEC
 cfgHE.MCS = 3;                     % Modulation and coding scheme (3 - 16QAM, 1/2 coding rate)
 
+% Generate seed
+scenario.seed = round((now - datenum('1/1/2020'))*100);
+
 % Create and configure the TGax channel
 chanBW = cfgHE.ChannelBandwidth;
 tgaxChannel = wlanTGaxChannel;
+tgaxChannel.Seed = scenario.seed;
 tgaxChannel.DelayProfile = 'Model-A'; % simple channel
 tgaxChannel.NumTransmitAntennas = cfgHE.NumTransmitAntennas;
 tgaxChannel.NumReceiveAntennas = 1; % SISO 
@@ -32,13 +36,11 @@ scenario.tx.HE_config = cfgHE;
 scenario.tx.tgax_channel = tgaxChannel;
 scenario.tx.numPackets = 10;
 
-% Generate seed
-scenario.seed = round((now - datenum('1/1/2020'))*100);
 
 % Get Ground Truth QAMS
 scenario.gt.data_symbols = create_scenario_gt(scenario);
 % Get GT Channel Estimation
 x = zeros(256,1);
 x(1) = 1;
-scenario.gt.channel_taps_gt = fftshift(abs(scenario.tx.tgax_channel(x)).^2);
+scenario.gt.channel_taps_gt = scenario.tx.tgax_channel(x);
 
