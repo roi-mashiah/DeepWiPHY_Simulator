@@ -2,9 +2,17 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
-
+from tqdm import tqdm
 from channel_est_model import ChannelEstimationModel
 from helpers.data_utils import concat_all_csv_files, reshape_vectors_to_matrices
+from enum import Enum
+
+
+class ChannelType(Enum):
+    A = "ch_A"
+    B = "ch_B"
+    C = "ch_B"
+    ALL = None
 
 
 def setup_train_test_data(group, group_size, test_size=0.2, seed=41):
@@ -15,17 +23,18 @@ def setup_train_test_data(group, group_size, test_size=0.2, seed=41):
     return [torch.FloatTensor(v) for v in train_test_data]
 
 
-def train_ch_est_model(x_train, y_train, lr, epochs):
-    model = ChannelEstimationModel()
+def train_ch_est_model(x_train, y_train, group_size, lr, epochs):
+    model = ChannelEstimationModel(group_size)
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     losses = []
-    for i in range(epochs):
+    for _ in tqdm(range(epochs)):
         y_predicted = model.forward(x_train)  # get predicted results
         loss = criterion(y_predicted, y_train)  # predicted values vs y_train
         losses.append(loss.detach().numpy())
-        if i % 10 == 0:
-            print((f'Epoch: {i} amd loss: {loss}'))
+        # if i % 10 == 0:
+        #     print((f'Epoch: {i} amd loss: {loss}'))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -52,18 +61,20 @@ def evaluate_model(x_test, y_test, model, criterion):
 if __name__ == '__main__':
     manual_seed = 41
     mu = 0.1
-    training_iterations = 100
-    group_size = 18
+    training_iterations = 1500
+    group_size = 96
     test_perc = 0.2
     data_path = r"..\data"
-
-    input_data = concat_all_csv_files(data_path, group_size)
+    ch_type = ChannelType.C.value
+    input_data = concat_all_csv_files(data_path, group_size, ch_type)
     g_1 = input_data[input_data['group'] == 1]
     x_train, x_test, y_train, y_test = setup_train_test_data(g_1, group_size, test_perc, manual_seed)
 
     torch.manual_seed(manual_seed)
-    ch_est_model, criterion, losses = train_ch_est_model(x_train, y_train, lr=mu, epochs=training_iterations)
+    ch_est_model, criterion, losses = train_ch_est_model(x_train, y_train, group_size, lr=mu,
+                                                         epochs=training_iterations)
 
     plot_loss(training_iterations, losses, "Training")
 
     loss = evaluate_model(x_test, y_test, ch_est_model, criterion)
+    print(f"Mean Loss: {loss}")
