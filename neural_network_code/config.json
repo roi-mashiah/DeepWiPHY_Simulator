@@ -1,0 +1,11 @@
+{
+  "manualSeed": 41,
+  "mu": 0.1,
+  "trainingIterations": 1000,
+  "groupSize": 18,
+  "testPerc": 0.2,
+  "dataPath": "..\\data",
+  "chType": "B",
+  "snrValue": 5,
+  "part": "imag"
+}

@@ -5,14 +5,10 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from channel_est_model import ChannelEstimationModel
 from helpers.data_utils import concat_all_csv_files, reshape_vectors_to_matrices
-from enum import Enum
-
-
-class ChannelType(Enum):
-    A = "ch_A"
-    B = "ch_B"
-    C = "ch_B"
-    ALL = None
+import json
+import logging
+import colorlog
+from configuration import Configuration, asdict
 
 
 def setup_train_test_data(group, group_size, test_size=0.2, seed=41):
@@ -58,23 +54,44 @@ def evaluate_model(x_test, y_test, model, criterion):
     return loss
 
 
+def load_config(p: str) -> Configuration:
+    with open(p, 'r') as r:
+        config_json = json.load(r)
+    config = Configuration.from_dict(config_json)
+    log.info("Loaded Configuration")
+    for field_name, field_value in asdict(config).items():
+        log.info(f"{field_name}: {field_value}")
+    return config
+
+
+def init_logger():
+    # Create a logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    console_handler = colorlog.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = colorlog.ColoredFormatter("%(log_color)s%(levelname)s: %(message)s")
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    return logger
+
+
 if __name__ == '__main__':
-    manual_seed = 41
-    mu = 0.1
-    training_iterations = 1500
-    group_size = 96
-    test_perc = 0.2
-    data_path = r"..\data"
-    ch_type = ChannelType.C.value
-    input_data = concat_all_csv_files(data_path, group_size, ch_type)
+    log = init_logger()
+    log.info("Starting session...")
+    config = load_config(r".\config.json")
+    input_data = concat_all_csv_files(config)
+    log.info(f"Data size after filter (number of scenarios): {input_data.shape[0] / 242}")
     g_1 = input_data[input_data['group'] == 1]
-    x_train, x_test, y_train, y_test = setup_train_test_data(g_1, group_size, test_perc, manual_seed)
+    x_train, x_test, y_train, y_test = setup_train_test_data(g_1, config.group_size, config.test_perc,
+                                                             config.manual_seed)
 
-    torch.manual_seed(manual_seed)
-    ch_est_model, criterion, losses = train_ch_est_model(x_train, y_train, group_size, lr=mu,
-                                                         epochs=training_iterations)
+    torch.manual_seed(config.group_size)
+    log.info("Start training...")
+    ch_est_model, criterion, losses = train_ch_est_model(x_train, y_train, config.group_size, lr=config.mu,
+                                                         epochs=config.training_iterations)
 
-    plot_loss(training_iterations, losses, "Training")
+    plot_loss(config.training_iterations, losses, "Training")
 
     loss = evaluate_model(x_test, y_test, ch_est_model, criterion)
-    print(f"Mean Loss: {loss}")
+    log.info(f"Mean Loss: {loss}")

@@ -34,7 +34,7 @@ tgaxChannel.SampleRate = fs;
 
 scenario.tx.HE_config = cfgHE;
 scenario.tx.tgax_channel = tgaxChannel;
-scenario.tx.numPackets = 10;
+scenario.tx.numPackets = 100;
 
 
 % Get Ground Truth QAMS
