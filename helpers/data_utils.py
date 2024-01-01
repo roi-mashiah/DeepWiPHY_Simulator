@@ -45,9 +45,12 @@ def concat_all_csv_files(configuration: Configuration):
                 if f.endswith('.csv')]
     all_runs_df = pd.DataFrame(all_runs, index=range(len(all_runs)))
     filtered_data = filter_data(all_runs_df, configuration.ch_type, configuration.snr_value, configuration.part)
+    filtered_data.reset_index(drop=True, inplace=True)
     all_data_list = []
-    for file_path in filtered_data['path'].to_list():
-        scenario = pd.read_csv(file_path)
+    for i, scenario_row in filtered_data.iterrows():
+        scenario = pd.read_csv(scenario_row['path'])
+        scenario[list(scenario_row.keys())] = scenario_row
+        scenario['sc_index'] = i
         scenario['group'] = (scenario.index // configuration.group_size) + 1
         all_data_list.append(scenario)
 
@@ -62,8 +65,4 @@ def reshape_vectors_to_matrices(x, y, group_size):
 
 
 if __name__ == '__main__':
-    data_path = r"C:\Users\97252\PycharmProjects\CleaningData\data"
-    input_data = concat_all_csv_files(data_path, 18)
-
-    group_1_samples = input_data[input_data['group'] == 1]
-    print(group_1_samples.head(20))
+    pass

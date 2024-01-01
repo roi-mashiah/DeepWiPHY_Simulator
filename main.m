@@ -12,7 +12,7 @@ end
 %% global configs and preallocs
 save_scenario = 1;
 maxNumErrors = 10;   % The maximum number of packet errors at an SNR point
-snr = [5, 7.5, 10:5:30];
+snr = [10:5:30];
 % snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);

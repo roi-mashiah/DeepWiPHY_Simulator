@@ -3,8 +3,9 @@ from torch import relu, sigmoid
 
 
 class ChannelEstimationModel(nn.Module):
-    def __init__(self, group_size, h1=60, h2=30, h3=15):
+    def __init__(self, group_size, criterion, h1=60, h2=30, h3=15):
         super().__init__()
+        self.criterion = criterion
         self.fc1 = nn.Linear(group_size, h1)
         self.fc2 = nn.Linear(h1, h2)
         self.fc3 = nn.Linear(h2, h3)

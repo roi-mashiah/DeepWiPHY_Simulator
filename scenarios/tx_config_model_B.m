@@ -21,6 +21,7 @@ scenario.seed = round((now - datenum('1/1/2020'))*100);
 % Create and configure the TGax channel
 chanBW = cfgHE.ChannelBandwidth;
 tgaxChannel = wlanTGaxChannel;
+tgaxChannel.RandomStream = 'mt19937ar with seed';
 tgaxChannel.Seed = scenario.seed;
 tgaxChannel.DelayProfile = 'Model-B'; 
 tgaxChannel.NumTransmitAntennas = cfgHE.NumTransmitAntennas;
