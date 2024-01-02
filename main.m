@@ -11,8 +11,8 @@ end
 
 %% global configs and preallocs
 save_scenario = 1;
-maxNumErrors = 10;   % The maximum number of packet errors at an SNR point
-snr = [10:5:30];
+maxNumErrors = 60;   % The maximum number of packet errors at an SNR point
+snr = [12:4:40];
 % snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
@@ -42,7 +42,7 @@ for sc_ind = 1:numel(scenarios)
         % Account for noise energy in nulls so the SNR is defined per
         % active subcarrier
         packetSNR = snr(isnr)-10*log10(ofdmInfo.FFTLength/ofdmInfo.NumTones);
-
+        scenario.gt.realSnr = packetSNR;
         % Loop to simulate multiple packets
         numPacketErrors = 0;
         numPkt = 1; % Index of packet transmitted
@@ -58,6 +58,11 @@ for sc_ind = 1:numel(scenarios)
             % Pass through a fading indoor TGax channel
             reset(tgaxChannel); % Reset channel for different realization
             rx = tgaxChannel(txPad);
+
+            % Get GT Channel Estimation
+            x = zeros(256,1);
+            x(1) = 1;
+            scenario.gt.channel_taps_gt{numPkt} = tgaxChannel(x);
 
             % Pass the waveform through AWGN channel
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
@@ -99,15 +104,15 @@ for sc_ind = 1:numel(scenarios)
             rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
             heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
-            
+
             % log HE-LTF data for training, channel estimation for
             % reference and comparisons
-            scenario.rx.HE_LTF{numPkt} = heltfDemod; 
+            scenario.rx.HE_LTF{numPkt} = heltfDemod;
             scenario.rx.channel_est = chanEst;
 
             % Data demodulate - # symbols = # samples / (fftSize + CPSize)
             rxData = rx(pktOffset+(ind.HEData(1):ind.HEData(2)),:);
-            demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);            
+            demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);
 
             % Pilot phase tracking
             demodSym = wlanHETrackPilotError(demodSym,chanEst,cfgHE,'HE-Data');
@@ -118,26 +123,20 @@ for sc_ind = 1:numel(scenarios)
             % Extract data subcarriers from demodulated symbols and channel
             % estimate
             demodDataSym = demodSym(ofdmInfo.DataIndices,:,:);
-            chanEstData = chanEst(ofdmInfo.DataIndices,:,:);           
-      
+            chanEstData = chanEst(ofdmInfo.DataIndices,:,:);
+
             % Equalization and STBC combining
             [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);
 
             % log symbols to calculate SER
             scenario.rx.data_symbols{numPkt} = eqDataSym;
-            
+
             if plot_symb
                 ref = scenario.gt{numPkt};
                 plot_symb_ref(ref,eqDataSym)
             end
-            
-            if save_scenario
-                filename = strcat("sc_",datestr(now,"ddmmyy_HHMM"),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
-                if ~exist(".\data","dir")
-                    mkdir(".\data")
-                end
-                save(fullfile("data\",filename),"scenario");
-            end
+
+
             % Recover data
             rxPSDU = wlanHEDataBitRecover(eqDataSym,nVarEst,csi,cfgHE,'LDPCDecodingMethod','norm-min-sum');
 
@@ -148,7 +147,13 @@ for sc_ind = 1:numel(scenarios)
             end
             numPkt = numPkt+1;
         end
-
+        if save_scenario
+            filename = strcat("sc_",datestr(now,"ddmmyy_HHMM"),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
+            if ~exist(".\data","dir")
+                mkdir(".\data")
+            end
+            save(fullfile("data\",filename),"scenario");
+        end
         if plot_ch
             plot_channel(scenario)
         end

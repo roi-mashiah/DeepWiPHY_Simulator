@@ -21,8 +21,8 @@ scenario.seed = round((now - datenum('1/1/2020'))*100);
 % Create and configure the TGax channel
 chanBW = cfgHE.ChannelBandwidth;
 tgaxChannel = wlanTGaxChannel;
-tgaxChannel.RandomStream = 'mt19937ar with seed';
-tgaxChannel.Seed = scenario.seed;
+% tgaxChannel.RandomStream = 'mt19937ar with seed';
+% tgaxChannel.Seed = scenario.seed;
 tgaxChannel.DelayProfile = 'Model-B'; 
 tgaxChannel.NumTransmitAntennas = cfgHE.NumTransmitAntennas;
 tgaxChannel.NumReceiveAntennas = 1; % SISO 
@@ -40,8 +40,4 @@ scenario.tx.numPackets = 100;
 
 % Get Ground Truth QAMS
 scenario.gt.data_symbols = create_scenario_gt(scenario);
-% Get GT Channel Estimation
-x = zeros(256,1);
-x(1) = 1;
-scenario.gt.channel_taps_gt = scenario.tx.tgax_channel(x);
 
