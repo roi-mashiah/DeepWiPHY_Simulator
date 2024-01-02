@@ -29,11 +29,11 @@ def parse_filename(filename):
 
 def filter_data(all_runs: pd.DataFrame, model_type: str, snr: int, part: str) -> pd.DataFrame:
     model_mask = all_runs['ch'] == model_type \
-        if model_type else [True] * all_runs.shape[0]
+        if model_type else pd.Series([True] * all_runs.shape[0])
     snr_mask = all_runs['snr'] >= snr \
-        if snr else [True] * all_runs.shape[0]
+        if snr else pd.Series([True] * all_runs.shape[0])
     part_mask = all_runs['part'] == part \
-        if part else [True] * all_runs.shape[0]
+        if part else pd.Series([True] * all_runs.shape[0])
     final_filter = model_mask & snr_mask & part_mask
     return all_runs.loc[final_filter, :]
 
