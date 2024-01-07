@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import RobustScaler
 from tqdm import tqdm
 from channel_est_model import ChannelEstimationModel
 from helpers.data_utils import concat_all_csv_files, reshape_vectors_to_matrices
@@ -12,8 +13,9 @@ from configuration import Configuration, asdict
 from helpers import performance_plots as perf_plots
 
 
-def setup_train_test_data(group, group_size, test_size=0.2, seed=41):
-    x_1_flat = group['HE-LTF'].values
+def setup_train_test_data(all_data, group_size, test_size=0.2, seed=41):
+    group = input_data[input_data['group'] == 1]
+    x_1_flat = all_data['HE-LTF'].values
     y_1_flat = group['channel_taps'].values
     sc_ind = np.array(list(set(group['sc_index'].values))).reshape(-1, 1)
     x_1, y_1 = reshape_vectors_to_matrices(x_1_flat, y_1_flat, group_size)
@@ -24,14 +26,31 @@ def setup_train_test_data(group, group_size, test_size=0.2, seed=41):
     return [torch.FloatTensor(v) for v in train_test_data]
 
 
-def train_ch_est_model(x_train, y_train, group_size, lr, epochs):
-    model = ChannelEstimationModel(group_size, criterion=nn.MSELoss())
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+def scale_vector(v):
+    # created scaler
+    scaler = RobustScaler()
+    # fit scaler on training dataset
+    scaler.fit(v)
+    # transform training dataset
+    return scaler.transform(v), scaler
+
+
+def train_ch_est_model(x_train, y_train, configuration: Configuration):
+    model = ChannelEstimationModel(criterion=nn.MSELoss(),
+                                   output_dim=configuration.group_size,
+                                   node_counts=configuration.node_counts)
+    optimizer = torch.optim.Adam(model.parameters(), lr=configuration.mu)
     losses = []
-    with tqdm(total=epochs, desc='Current loss') as pbar:
-        for _ in range(epochs):
-            y_predicted = model.forward(x_train)  # get predicted results
-            loss = model.criterion(y_predicted, y_train)  # predicted values vs y_train
+
+    x_train_scaled, input_scaler = scale_vector(x_train)
+    y_train_scaled, output_scaler = scale_vector(y_train)
+    model.output_scaler = output_scaler
+    model.input_scaler = input_scaler
+
+    with tqdm(total=configuration.training_iterations, desc='Current loss') as pbar:
+        for _ in range(configuration.training_iterations):
+            y_predicted = model.forward(torch.FloatTensor(x_train_scaled))  # get predicted results
+            loss = model.criterion(y_predicted, torch.FloatTensor(y_train_scaled))  # predicted values vs y_train
             losses.append(loss.detach().numpy())
             pbar.set_description(f"Current loss: {losses[-1]}")
             optimizer.zero_grad()
@@ -42,12 +61,14 @@ def train_ch_est_model(x_train, y_train, group_size, lr, epochs):
 
 
 def evaluate_model(x_under_test, y_under_test, group, model: ChannelEstimationModel):
-    x_test_raw = x_under_test[:, :config.group_size]
+    x_test_raw = x_under_test[:, :242]
     y_test_raw = y_under_test[:, :config.group_size]
+    y_test_norm = torch.FloatTensor(model.output_scaler.transform(y_test_raw))
+    x_test_norm = torch.FloatTensor(model.input_scaler.transform(x_test_raw))
     with torch.no_grad():
-        y_eval = model.forward(x_test_raw)
+        y_eval = model.forward(x_test_norm)
         # calculate MSE for each scenario then take the mean - returns a scalar
-        loss = model.criterion(y_eval, y_test_raw)
+        loss = model.criterion(y_eval, y_test_norm)
     metadata = {k: group.loc[group['sc_index'] == k, ['ch', 'snr', 'part']].head(1)
                 for k in y_under_test[:, -1].numpy()}
     perf_plots.plot_channel_reconstruction(y_under_test, y_eval, metadata)
@@ -82,22 +103,18 @@ if __name__ == '__main__':
     config = load_config(r".\config.json")
     input_data = concat_all_csv_files(config)
     log.info(f"Data size after filter (number of scenarios): {input_data.shape[0] / 242}")
-    g_1 = input_data[input_data['group'] == 1]
-    x_train, x_test, y_train, y_test = setup_train_test_data(g_1,
+    x_train, x_test, y_train, y_test = setup_train_test_data(input_data,
                                                              config.group_size,
                                                              config.test_perc,
                                                              config.manual_seed)
 
     torch.manual_seed(config.group_size)
     log.info("Start training...")
-    x_train_raw = x_train[:, :config.group_size]
+    x_train_raw = x_train[:, :242]
     y_train_raw = y_train[:, :config.group_size]
-    ch_est_model, losses = train_ch_est_model(x_train_raw, y_train_raw,
-                                              config.group_size,
-                                              lr=config.mu,
-                                              epochs=config.training_iterations)
+    ch_est_model, losses = train_ch_est_model(x_train_raw, y_train_raw, config)
 
     perf_plots.plot_loss(config.training_iterations, losses, "Training")
 
-    loss = evaluate_model(x_test, y_test, g_1, ch_est_model)
+    loss = evaluate_model(x_test, y_test, input_data, ch_est_model)
     log.info(f"Mean Loss: {loss}")

@@ -59,7 +59,7 @@ def concat_all_csv_files(configuration: Configuration):
 
 
 def reshape_vectors_to_matrices(x, y, group_size):
-    x_r = np.reshape(x, [len(x) // group_size, group_size])
+    x_r = np.reshape(x, [len(x) // 242, 242])
     y_r = np.reshape(y, [len(y) // group_size, group_size])
     return x_r, y_r
 

@@ -22,6 +22,7 @@ def plot_channel_reconstruction(gt, estimation, metadata):
         plt.stem(gt[i, :estimation.size()[-1]].numpy(), linefmt='g', markerfmt='go', label='truth')
         plt.stem(estimation[i, :].numpy(), linefmt='r', markerfmt='rd', label='estimation')
         plt.grid()
+        plt.legend()
         key = float(gt[i, -1])
         title_str = '_'.join(f"{key.upper()}: {value}"
                              for key, value in metadata[key].iloc[0].to_dict().items())

@@ -1,11 +1,15 @@
 {
   "manualSeed": 41,
-  "mu": 0.1,
+  "mu": 3e-4,
   "trainingIterations": 500,
-  "groupSize": 18,
+  "nodeCounts": [
+    30,
+    30
+  ],
+  "groupSize": 20,
   "testPerc": 0.2,
   "dataPath": "..\\data",
-  "chType": "C",
-  "snrValue": 5,
-  "part": "imag"
+  "chType": "A",
+  "snrValue": null,
+  "part": null
 }

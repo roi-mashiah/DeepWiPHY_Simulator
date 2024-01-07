@@ -12,6 +12,7 @@ class Configuration:
     data_path: str = field(metadata={'json_key': 'dataPath'})
     ch_type: str = field(metadata={'json_key': 'chType'})
     snr_value: int = field(metadata={'json_key': 'snrValue'})
+    node_counts: list = field(metadata={'json_key': 'nodeCounts'})
 
     @classmethod
     def from_dict(cls, data):
@@ -24,7 +25,8 @@ class Configuration:
             test_perc=data.get('testPerc'),
             data_path=data.get('dataPath'),
             ch_type=data.get('chType'),
-            snr_value=data.get('snrValue')
+            snr_value=data.get('snrValue'),
+            node_counts=data.get('nodeCounts')
         )
 
 

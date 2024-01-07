@@ -1,22 +1,24 @@
 import torch.nn as nn
-from torch import relu, sigmoid
+from torch import tanh
 
 
 class ChannelEstimationModel(nn.Module):
-    def __init__(self, group_size, criterion, h1=20, h2=20, h3=20):
+    def __init__(self, criterion, input_dim=242, output_dim=18, node_counts=None):
         super().__init__()
+        self.output_scaler = None
+        self.input_scaler = None
         self.criterion = criterion
-        self.fc1 = nn.Linear(group_size, h1)
-        self.bn1 = nn.BatchNorm1d(h1)
-        self.fc2 = nn.Linear(h1, h2)
-        self.bn2 = nn.BatchNorm1d(h2)
-        self.fc3 = nn.Linear(h2, h3)
-        self.bn3 = nn.BatchNorm1d(h3)
-        self.out = nn.Linear(h3, group_size)
+        self.fc0 = nn.Linear(input_dim, node_counts[0])
+        self.out = nn.Linear(node_counts[-1], output_dim)
+        if node_counts is None:
+            node_counts = [50, 50, 50]
+        self.node_counts = node_counts
+        for i, neuron_count in enumerate(node_counts[1:]):
+            setattr(self, f"fc{i + 1}", nn.Linear(node_counts[i - 1], neuron_count))
 
     def forward(self, x):
-        x = sigmoid(self.bn1(self.fc1(x)))
-        x = sigmoid(self.bn2(self.fc2(x)))
-        x = relu(self.bn3(self.fc3(x)))
+        for i in range(len(self.node_counts)):
+            fc = getattr(self, f"fc{i}")
+            x = tanh(fc(x))
         x = self.out(x)
         return x
