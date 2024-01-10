@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from channel_est_model import ChannelEstimationModel
 from helpers.data_utils import concat_all_csv_files, reshape_vectors_to_matrices
@@ -28,7 +28,7 @@ def setup_train_test_data(all_data, group_size, test_size=0.2, seed=41):
 
 def scale_vector(v):
     # created scaler
-    scaler = RobustScaler()
+    scaler = StandardScaler()
     # fit scaler on training dataset
     scaler.fit(v)
     # transform training dataset
@@ -46,7 +46,7 @@ def train_ch_est_model(x_train, y_train, configuration: Configuration):
     y_train_scaled, output_scaler = scale_vector(y_train)
     model.output_scaler = output_scaler
     model.input_scaler = input_scaler
-
+    model.train()
     with tqdm(total=configuration.training_iterations, desc='Current loss') as pbar:
         for _ in range(configuration.training_iterations):
             y_predicted = model.forward(torch.FloatTensor(x_train_scaled))  # get predicted results
@@ -65,11 +65,12 @@ def evaluate_model(x_under_test, y_under_test, group, model: ChannelEstimationMo
     y_test_raw = y_under_test[:, :config.group_size]
     y_test_norm = torch.FloatTensor(model.output_scaler.transform(y_test_raw))
     x_test_norm = torch.FloatTensor(model.input_scaler.transform(x_test_raw))
+    model.eval()
     with torch.no_grad():
         y_eval = model.forward(x_test_norm)
         # calculate MSE for each scenario then take the mean - returns a scalar
         loss = model.criterion(y_eval, y_test_norm)
-    metadata = {k: group.loc[group['sc_index'] == k, ['ch', 'snr', 'part']].head(1)
+    metadata = {k: group.loc[group['sc_index'] == k, ['ch', 'snr', 'part','packet']].head(1)
                 for k in y_under_test[:, -1].numpy()}
     perf_plots.plot_channel_reconstruction(y_under_test, y_eval, metadata)
     return loss

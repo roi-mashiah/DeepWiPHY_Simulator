@@ -1,15 +1,14 @@
 {
   "manualSeed": 41,
-  "mu": 3e-4,
-  "trainingIterations": 500,
+  "mu": 0.003,
+  "trainingIterations": 2000,
   "nodeCounts": [
-    30,
-    30
+    200,100,200
   ],
-  "groupSize": 20,
+  "groupSize": 60,
   "testPerc": 0.2,
   "dataPath": "..\\data",
-  "chType": "A",
-  "snrValue": null,
+  "chType": "B",
+  "snrValue": 12,
   "part": null
 }
