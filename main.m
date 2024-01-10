@@ -108,7 +108,7 @@ for sc_ind = 1:numel(scenarios)
             % log HE-LTF data for training, channel estimation for
             % reference and comparisons
             scenario.rx.HE_LTF{numPkt} = heltfDemod;
-            scenario.rx.channel_est = chanEst;
+            scenario.rx.channel_est{numPkt} = chanEst;
 
             % Data demodulate - # symbols = # samples / (fftSize + CPSize)
             rxData = rx(pktOffset+(ind.HEData(1):ind.HEData(2)),:);
