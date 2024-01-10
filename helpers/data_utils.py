@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import os
 import numpy as np
@@ -22,7 +23,8 @@ def parse_filename(filename):
         'snr': snr,
         'ch': ch,
         'part': part,
-        'path': filename
+        'path': filename,
+        'packet': packet_number
     }
     return result_dict
 
@@ -38,6 +40,15 @@ def filter_data(all_runs: pd.DataFrame, model_type: str, snr: int, part: str) ->
     return all_runs.loc[final_filter, :]
 
 
+def read_one_data_file(data_path_obj):
+    index, scenario_row, config = data_path_obj
+    scenario = pd.read_csv(scenario_row['path'])
+    scenario[list(scenario_row.keys())] = scenario_row
+    scenario['sc_index'] = index
+    scenario['group'] = (scenario.index // config.group_size) + 1
+    return scenario
+
+
 def concat_all_csv_files(configuration: Configuration):
     data_path = configuration.data_path
     all_runs = [parse_filename(os.path.join(data_path, f))
@@ -46,16 +57,11 @@ def concat_all_csv_files(configuration: Configuration):
     all_runs_df = pd.DataFrame(all_runs, index=range(len(all_runs)))
     filtered_data = filter_data(all_runs_df, configuration.ch_type, configuration.snr_value, configuration.part)
     filtered_data.reset_index(drop=True, inplace=True)
-    all_data_list = []
-    for i, scenario_row in filtered_data.iterrows():
-        scenario = pd.read_csv(scenario_row['path'])
-        scenario[list(scenario_row.keys())] = scenario_row
-        scenario['sc_index'] = i
-        scenario['group'] = (scenario.index // configuration.group_size) + 1
-        all_data_list.append(scenario)
-
-    all_data_concatenated = pd.concat(all_data_list, ignore_index=True)
-    return all_data_concatenated
+    list_of_all_data = [(i, scenario_row, configuration) for i, scenario_row in filtered_data.iterrows()]
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        mapping = ex.map(read_one_data_file, list_of_all_data)
+    all_data_list = list(mapping)
+    return pd.concat(all_data_list, ignore_index=True)
 
 
 def reshape_vectors_to_matrices(x, y, group_size):
