@@ -1,121 +1,76 @@
-import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+import utils
 from channel_est_model import ChannelEstimationModel
-from helpers.data_utils import concat_all_csv_files, reshape_vectors_to_matrices
-import json
-import logging
-import colorlog
-from configuration import Configuration, asdict
+from configuration import Configuration
+from dataset import WiPhyDataset
 from helpers import performance_plots as perf_plots
 
 
-def setup_train_test_data(all_data, group_size, test_size=0.2, seed=41):
-    group = input_data[input_data['group'] == 1]
-    x_1_flat = all_data['HE-LTF'].values
-    y_1_flat = group['channel_taps'].values
-    sc_ind = np.array(list(set(group['sc_index'].values))).reshape(-1, 1)
-    x_1, y_1 = reshape_vectors_to_matrices(x_1_flat, y_1_flat, group_size)
-    # add index to trace back scenario
-    x_1 = np.concatenate((x_1, sc_ind), axis=1)
-    y_1 = np.concatenate((y_1, sc_ind), axis=1)
-    train_test_data = train_test_split(x_1, y_1, test_size=test_size, random_state=seed)
-    return [torch.FloatTensor(v) for v in train_test_data]
+def training_loop(data_loader, model, optimizer):
+    model.train()
+    losses = []
+    for batch, (X, y) in enumerate(data_loader):
+        y_predicted = model(X)  # get predicted results
+        loss = model.criterion(y_predicted, y)  # predicted values vs y_train
+        losses.append(loss.detach().numpy())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    return losses
 
 
-def scale_vector(v):
-    # created scaler
-    scaler = StandardScaler()
-    # fit scaler on training dataset
-    scaler.fit(v)
-    # transform training dataset
-    return scaler.transform(v), scaler
+def testing_loop(dataloader, model):
+    model.eval()
+    num_batches = len(dataloader)
+    test_loss = 0
+
+    with torch.no_grad():
+        for X, y in dataloader:
+            pred = model(X)
+            test_loss += model.criterion(pred, y).item()
+
+    test_loss /= num_batches
+    return test_loss
 
 
-def train_ch_est_model(x_train, y_train, configuration: Configuration):
+def train_test_ch_est_model(train_data_loader, test_data_loader, configuration: Configuration):
     model = ChannelEstimationModel(criterion=nn.MSELoss(),
                                    output_dim=configuration.group_size,
                                    node_counts=configuration.node_counts)
     optimizer = torch.optim.Adam(model.parameters(), lr=configuration.mu)
-    losses = []
-
-    x_train_scaled, input_scaler = scale_vector(x_train)
-    y_train_scaled, output_scaler = scale_vector(y_train)
-    model.output_scaler = output_scaler
-    model.input_scaler = input_scaler
-    model.train()
-    with tqdm(total=configuration.training_iterations, desc='Current loss') as pbar:
-        for _ in range(configuration.training_iterations):
-            y_predicted = model.forward(torch.FloatTensor(x_train_scaled))  # get predicted results
-            loss = model.criterion(y_predicted, torch.FloatTensor(y_train_scaled))  # predicted values vs y_train
-            losses.append(loss.detach().numpy())
-            pbar.set_description(f"Current loss: {losses[-1]}")
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    train_loss_over_epochs = []
+    test_loss_over_epochs = []
+    with tqdm(total=config.training_iterations, desc='Current losses (train,test)') as pbar:
+        for t in range(config.training_iterations):
+            curr_tr_loss = training_loop(train_data_loader, model, optimizer)
+            curr_test_loss = testing_loop(test_data_loader, model)
+            pbar.set_description(f"Current losses (train,test): {sum(curr_tr_loss)/len(curr_tr_loss)},{curr_test_loss}")
+            train_loss_over_epochs.append(curr_tr_loss)
+            test_loss_over_epochs.append(curr_test_loss)
             pbar.update(1)
-    return model, losses
-
-
-def evaluate_model(x_under_test, y_under_test, group, model: ChannelEstimationModel):
-    x_test_raw = x_under_test[:, :242]
-    y_test_raw = y_under_test[:, :config.group_size]
-    y_test_norm = torch.FloatTensor(model.output_scaler.transform(y_test_raw))
-    x_test_norm = torch.FloatTensor(model.input_scaler.transform(x_test_raw))
-    model.eval()
-    with torch.no_grad():
-        y_eval = model.forward(x_test_norm)
-        # calculate MSE for each scenario then take the mean - returns a scalar
-        loss = model.criterion(y_eval, y_test_norm)
-    metadata = {k: group.loc[group['sc_index'] == k, ['ch', 'snr', 'part','packet']].head(1)
-                for k in y_under_test[:, -1].numpy()}
-    perf_plots.plot_channel_reconstruction(y_under_test, y_eval, metadata)
-    return loss
-
-
-def load_config(p: str) -> Configuration:
-    with open(p, 'r') as r:
-        config_json = json.load(r)
-    config = Configuration.from_dict(config_json)
-    log.info("Loaded Configuration")
-    for field_name, field_value in asdict(config).items():
-        log.info(f"{field_name}: {field_value}")
-    return config
-
-
-def init_logger():
-    # Create a logger
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    console_handler = colorlog.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
-    formatter = colorlog.ColoredFormatter("%(log_color)s%(levelname)s: %(message)s")
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    return logger
+    return model, train_loss_over_epochs, test_loss_over_epochs
 
 
 if __name__ == '__main__':
-    log = init_logger()
+    log = utils.init_logger()
     log.info("Starting session...")
-    config = load_config(r".\config.json")
-    input_data = concat_all_csv_files(config)
-    log.info(f"Data size after filter (number of scenarios): {input_data.shape[0] / 242}")
-    x_train, x_test, y_train, y_test = setup_train_test_data(input_data,
-                                                             config.group_size,
-                                                             config.test_perc,
-                                                             config.manual_seed)
-
-    torch.manual_seed(config.group_size)
+    config = utils.load_config(r".\config.json", log)
+    train_dataset = WiPhyDataset(config, is_train=True)
+    test_dataset = WiPhyDataset(config, is_train=False)
+    log.info(f"Train data size after filter (number of scenarios): {len(train_dataset)}")
+    log.info(f"Test data size after filter (number of scenarios): {len(test_dataset)}")
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=2)
+    test_loader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=True, num_workers=2)
+    torch.manual_seed(config.manual_seed)
     log.info("Start training...")
-    x_train_raw = x_train[:, :242]
-    y_train_raw = y_train[:, :config.group_size]
-    ch_est_model, losses = train_ch_est_model(x_train_raw, y_train_raw, config)
+    ch_est_model, train_loss, test_loss = train_test_ch_est_model(train_loader, test_loader, config)
 
-    perf_plots.plot_loss(config.training_iterations, losses, "Training")
+    perf_plots.plot_loss(config.training_iterations, train_loss, "Training")
+    perf_plots.plot_loss(config.training_iterations, test_loss, "Testing")
 
-    loss = evaluate_model(x_test, y_test, input_data, ch_est_model)
-    log.info(f"Mean Loss: {loss}")
+    # loss = evaluate_model(x_test, y_test, input_data, ch_est_model)
+    # log.info(f"Mean Loss: {loss}")

@@ -1,14 +1,16 @@
 {
   "manualSeed": 41,
-  "mu": 0.003,
-  "trainingIterations": 2000,
+  "mu": 0.001,
+  "batchSize": 64,
+  "trainingIterations": 5,
   "nodeCounts": [
-    200,100,200
+    512,
+    256
   ],
-  "groupSize": 60,
+  "groupSize": 18,
   "testPerc": 0.2,
   "dataPath": "..\\data",
-  "chType": "B",
-  "snrValue": 12,
+  "chType": null,
+  "snrValue": null,
   "part": null
 }

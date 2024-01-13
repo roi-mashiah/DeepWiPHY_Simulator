@@ -11,6 +11,7 @@ class Configuration:
     test_perc: float = field(metadata={'json_key': 'testPerc'})
     data_path: str = field(metadata={'json_key': 'dataPath'})
     ch_type: str = field(metadata={'json_key': 'chType'})
+    batch_size: int = field(metadata={'json_key': 'batchSize'})
     snr_value: int = field(metadata={'json_key': 'snrValue'})
     node_counts: list = field(metadata={'json_key': 'nodeCounts'})
 
@@ -26,7 +27,8 @@ class Configuration:
             data_path=data.get('dataPath'),
             ch_type=data.get('chType'),
             snr_value=data.get('snrValue'),
-            node_counts=data.get('nodeCounts')
+            node_counts=data.get('nodeCounts'),
+            batch_size=data.get('batchSize')
         )
 
 
