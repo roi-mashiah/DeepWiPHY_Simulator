@@ -1,16 +1,15 @@
 {
   "manualSeed": 41,
-  "mu": 0.001,
-  "batchSize": 64,
-  "trainingIterations": 5,
+  "mu": 3e-4,
+  "batchSize": 512,
+  "trainingIterations": 1,
   "nodeCounts": [
     512,
-    256
+    512
   ],
   "groupSize": 18,
   "testPerc": 0.2,
-  "dataPath": "..\\data",
-  "chType": null,
-  "snrValue": null,
-  "part": null
+  "dataPath": "C:\\Projects\\DeepWiPHY\\DeepWiPHY_Simulator\\data",
+  "chType": "A",
+  "snrValue": 36
 }

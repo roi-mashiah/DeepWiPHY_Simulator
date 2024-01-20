@@ -4,7 +4,6 @@ from dataclasses import dataclass, field, asdict
 @dataclass
 class Configuration:
     mu: float
-    part: str = field(metadata={'json_key': 'part'})
     manual_seed: int = field(metadata={'json_key': 'manualSeed'})
     training_iterations: int = field(metadata={'json_key': 'trainingIterations'})
     group_size: int = field(metadata={'json_key': 'groupSize'})
@@ -19,7 +18,6 @@ class Configuration:
     def from_dict(cls, data):
         return cls(
             mu=data.get('mu'),
-            part=data.get('part'),
             manual_seed=data.get('manualSeed'),
             training_iterations=data.get('trainingIterations'),
             group_size=data.get('groupSize'),
