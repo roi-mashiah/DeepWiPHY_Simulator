@@ -23,7 +23,7 @@ chanBW = cfgHE.ChannelBandwidth;
 tgaxChannel = wlanTGaxChannel;
 % tgaxChannel.RandomStream = 'mt19937ar with seed';
 % tgaxChannel.Seed = scenario.seed;
-tgaxChannel.DelayProfile = 'Model-B'; 
+tgaxChannel.DelayProfile = 'Model-F'; 
 tgaxChannel.NumTransmitAntennas = cfgHE.NumTransmitAntennas;
 tgaxChannel.NumReceiveAntennas = 1; % SISO 
 tgaxChannel.TransmitReceiveDistance = 5; % Distance in meters for NLOS
@@ -35,9 +35,8 @@ tgaxChannel.SampleRate = fs;
 
 scenario.tx.HE_config = cfgHE;
 scenario.tx.tgax_channel = tgaxChannel;
-scenario.tx.numPackets = 1000;
-
 
 % Get Ground Truth QAMS
-% scenario.gt.data_symbols = 0;create_scenario_gt(scenario);
+% scenario.gt.data_symbols = create_scenario_gt(scenario);
+
 

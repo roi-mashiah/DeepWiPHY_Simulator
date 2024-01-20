@@ -1,18 +1,20 @@
 clear all;close all;clc
 addpath("helpers\","scenarios\");
 %% load scenarios
-scenario_paths = ["tx_config_model_A", "tx_config_model_B","tx_config_model_C"];
-scenarios = {};
+scenario_paths = dir("scenarios\*.m");
+scenarios = cell(size(scenario_paths,1),1);
 for f = 1:numel(scenario_paths)
     clear scenario
-    eval(scenario_paths(f));
+    [~,filename,~] = fileparts(scenario_paths(f).name);
+    eval(filename);
     scenarios{f} = scenario;
 end
 
 %% global configs and preallocs
 save_scenario = 1;
-maxNumErrors = 60;   % The maximum number of packet errors at an SNR point
-snr = [12:4:40];
+maxNumPackets = 10000;
+maxNumErrors = 0.5*maxNumPackets;   % The maximum number of packet errors at an SNR point
+snr = 12:4:40;
 % snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
@@ -23,7 +25,7 @@ for sc_ind = 1:numel(scenarios)
     cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
     chanBW = scenario.tx.HE_config.ChannelBandwidth;
-    maxNumPackets = scenario.tx.numPackets;
+    scenario.tx.numPackets = maxNumPackets;
 
     % Get occupied subcarrier indices and OFDM parameters
     ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
@@ -148,7 +150,7 @@ for sc_ind = 1:numel(scenarios)
             numPkt = numPkt+1;
         end
         if save_scenario
-            filename = strcat("sc_",datestr(now,"ddmmyy_HHMM"),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
+            filename = strcat("sc_",num2str(convertTo(datetime,'epochtime')),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
             if ~exist(".\data","dir")
                 mkdir(".\data")
             end

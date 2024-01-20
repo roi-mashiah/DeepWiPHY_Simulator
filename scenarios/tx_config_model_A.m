@@ -39,6 +39,6 @@ scenario.tx.numPackets = 1000;
 
 
 % Get Ground Truth QAMS
-scenario.gt.data_symbols = create_scenario_gt(scenario);
+% scenario.gt.data_symbols = 0;%create_scenario_gt(scenario);
 
 
