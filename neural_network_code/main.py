@@ -17,7 +17,7 @@ writer = SummaryWriter(f"runs\\{int(datetime.now().timestamp())}", flush_secs=5)
 def training_loop(data_loader, model, optimizer):
     model.train()
     losses = []
-    for batch, (X, y, _) in enumerate(data_loader):
+    for batch, (X, y, _, _) in enumerate(data_loader):
         y_predicted = model(X)  # get predicted results
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
         losses.append(loss.detach().numpy())
@@ -34,12 +34,12 @@ def testing_loop(dataloader, model, plot=False):
     test_loss = 0
 
     with torch.no_grad():
-        for X, y, packet_info in dataloader:
+        for X, y, baseline_ch_est, packet_info in dataloader:
             pred = model(X)
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
             if plot:
-                perf_plots.plot_channel_reconstruction(y, pred, packet_info, writer)
+                perf_plots.plot_channel_reconstruction(y, pred, baseline_ch_est, packet_info, writer)
 
     test_loss /= num_batches
     return test_loss

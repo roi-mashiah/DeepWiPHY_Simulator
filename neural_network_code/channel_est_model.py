@@ -21,6 +21,7 @@ class ChannelEstimationModel(nn.Module):
     def forward(self, x):
         for i in range(len(self.node_counts)):
             fc = getattr(self, f"fc{i}")
-            x = relu(fc(x))
+            batch_norm = nn.LazyBatchNorm1d()
+            x = relu(fc(batch_norm(x)))
         x = self.out(x)
         return x

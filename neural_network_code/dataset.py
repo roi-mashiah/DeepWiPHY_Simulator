@@ -1,6 +1,7 @@
 import os
 import re
 import numpy as np
+from numpy.fft import fftshift
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -35,15 +36,19 @@ class WiPhyDataset(Dataset):
                                      self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict().items()])
         packet = pd.read_csv(packet_path)
         packet["group"] = (packet.index // self.configuration.group_size) + 1
+        packet["channel_est_real"] = fftshift(packet["channel_est_real"].values)
+        packet["channel_est_imag"] = fftshift(packet["channel_est_imag"].values)
         he_ltf = torch.FloatTensor(np.concatenate((packet["HE-LTF_real"].values,
                                                    packet["HE-LTF_imag"].values)))
         channel = torch.FloatTensor(np.concatenate((packet[packet["group"] == 1]["channel_taps_real"].values,
                                                     packet[packet["group"] == 1]["channel_taps_imag"].values)))
+        channel_est = torch.FloatTensor(np.concatenate((packet[packet["group"] == 1]["channel_est_real"].values,
+                                                        packet[packet["group"] == 1]["channel_est_imag"].values)))
         if self.transform:
             he_ltf = self.transform(he_ltf)
         if self.target_transform:
             channel = self.target_transform(channel)
-        return he_ltf, channel, packet_info
+        return he_ltf, channel, channel_est, packet_info
 
     @staticmethod
     def parse_filename(filename):
