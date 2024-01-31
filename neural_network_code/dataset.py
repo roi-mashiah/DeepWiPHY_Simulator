@@ -10,6 +10,7 @@ from configuration import Configuration
 
 class WiPhyDataset(Dataset):
     def __init__(self, configuration: Configuration, is_train=True, transform=None, target_transform=None):
+        self.ref_seq = self.load_ref_sequence()
         self.is_train = is_train
         self.filtered_data = pd.DataFrame()
         self.all_packets = pd.DataFrame()
@@ -32,14 +33,15 @@ class WiPhyDataset(Dataset):
 
     def __getitem__(self, idx):
         packet_path = self.packets.loc[idx, "path"]
-        packet_info = str.join("_", [f"{k}_{v}" for k, v in
-                                     self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict().items()])
+        # packet_info = str.join("_", [f"{k}_{v}" for k, v in
+        #                              self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict().items()])
+        packet_info = self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict()
         packet = pd.read_csv(packet_path)
         packet["group"] = (packet.index // self.configuration.group_size) + 1
         packet["channel_est_real"] = fftshift(packet["channel_est_real"].values)
         packet["channel_est_imag"] = fftshift(packet["channel_est_imag"].values)
         he_ltf = torch.FloatTensor(np.concatenate((packet["HE-LTF_real"].values,
-                                                   packet["HE-LTF_imag"].values)))
+                                                   packet["HE-LTF_imag"].values, self.ref_seq)))
         channel = torch.FloatTensor(np.concatenate((packet[packet["group"] == 1]["channel_taps_real"].values,
                                                     packet[packet["group"] == 1]["channel_taps_imag"].values)))
         channel_est = torch.FloatTensor(np.concatenate((packet[packet["group"] == 1]["channel_est_real"].values,
@@ -49,6 +51,11 @@ class WiPhyDataset(Dataset):
         if self.target_transform:
             channel = self.target_transform(channel)
         return he_ltf, channel, channel_est, packet_info
+
+    @staticmethod
+    def load_ref_sequence():
+        sequence_df = pd.read_csv(r"C:\Projects\DeepWiPHY\DeepWiPHY_Simulator\HE_LTF_SEQ.csv")
+        return sequence_df['seq'].values
 
     @staticmethod
     def parse_filename(filename):

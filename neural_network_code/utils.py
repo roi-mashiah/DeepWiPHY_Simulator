@@ -4,6 +4,7 @@ import colorlog
 from configuration import Configuration, asdict
 import torch
 from sklearn.preprocessing import StandardScaler
+import numpy as np
 
 
 def scale_vector(v):
@@ -40,3 +41,22 @@ def init_logger():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     return logger
+
+
+def calculate_performance(gt, estimation, baseline_channel_est, metadata_dict):
+    metadata_dict["nn_loss"] = list(range(np.shape(gt.numpy())[0]))
+    metadata_dict["bl_loss"] = list(range(np.shape(gt.numpy())[0]))
+    metadata_dict['snr'] = metadata_dict['snr'].numpy()
+    metadata_dict['packet'] = metadata_dict['packet'].numpy()
+    for i in range(np.shape(gt.numpy())[0]):
+        curr_gt = gt.numpy()[i, :]
+        curr_est = estimation.numpy()[i, :]
+        curr_bl = baseline_channel_est.numpy()[i, :]
+        gt_abs = np.sqrt(np.sum(np.power(curr_gt.reshape([2, curr_est.shape[0] // 2]), 2), 0))
+        estimation_abs = np.sqrt(np.sum(np.power(curr_est.reshape([2, curr_gt.shape[0] // 2]), 2), 0))
+        baseline_estimation_abs = np.sqrt(np.sum(np.power(curr_bl.reshape([2, curr_bl.shape[0] // 2]), 2), 0))
+        mse = np.round(np.mean((gt_abs - estimation_abs) ** 2), 5)
+        bl_mse = np.round(np.mean((gt_abs - baseline_estimation_abs) ** 2), 5)
+        metadata_dict["nn_loss"][i] = mse
+        metadata_dict["bl_loss"][i] = bl_mse
+    return metadata_dict

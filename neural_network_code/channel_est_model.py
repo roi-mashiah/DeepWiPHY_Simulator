@@ -3,7 +3,7 @@ from torch import relu
 
 
 class ChannelEstimationModel(nn.Module):
-    def __init__(self, criterion, input_dim=484, output_dim=18, node_counts=None):
+    def __init__(self, criterion, input_dim=726, output_dim=18, node_counts=None):
         super().__init__()
         self.output_scaler = None
         self.input_scaler = None
