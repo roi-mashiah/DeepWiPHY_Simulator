@@ -1,7 +1,7 @@
 clear all;close all;clc
 addpath("helpers\","scenarios\");
 %% load scenarios
-scenario_paths = dir("scenarios\*.m");
+scenario_paths = dir("scenarios\roi\*.m");
 scenarios = cell(size(scenario_paths,1),1);
 for f = 1:numel(scenario_paths)
     clear scenario
@@ -12,14 +12,15 @@ end
 
 %% global configs and preallocs
 save_scenario = 1;
-maxNumPackets = 10000;
+maxNumPackets = 100;
 maxNumErrors = 0.5*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 12:4:40;
+% snr = 12:4:40;
+snr=[30:35];
 % snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
 plot_ch = 0; plot_symb = 0; plot_perf=0;
-
+output_data_dir = ".\data";
 for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};
     cfgHE = scenario.tx.HE_config;
@@ -31,6 +32,7 @@ for sc_ind = 1:numel(scenarios)
     ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
     scenario.tx.ofdmInfo = ofdmInfo;
     fs = tgaxChannel.SampleRate;
+    Ts = 1/fs;
     % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
     ind = wlanFieldIndices(cfgHE);
 
@@ -64,7 +66,9 @@ for sc_ind = 1:numel(scenarios)
             % Get GT Channel Estimation
             x = zeros(256,1);
             x(1) = 1;
-            scenario.gt.channel_taps_gt{numPkt} = tgaxChannel(x);
+            y = tgaxChannel(x);
+            scenario.gt.channel_taps_gt{numPkt} = y;
+            scenario.gt.rms_delay_spread{numPkt} = calculate_rms_delay_spread(Ts, y);
 
             % Pass the waveform through AWGN channel
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
@@ -151,10 +155,10 @@ for sc_ind = 1:numel(scenarios)
         end
         if save_scenario
             filename = strcat("sc_",num2str(convertTo(datetime,'epochtime')),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
-            if ~exist(".\data","dir")
-                mkdir(".\data")
+            if ~exist(output_data_dir,"dir")
+                mkdir(output_data_dir)
             end
-            save(fullfile("data\",filename),"scenario");
+            save(fullfile(output_data_dir,filename),"scenario");
         end
         if plot_ch
             plot_channel(scenario)
@@ -172,4 +176,13 @@ for sc_ind = 1:numel(scenarios)
     if plot_perf
         plot_performance(snr,packetErrorRate,scenario)
     end
+end
+
+function rms_ds = calculate_rms_delay_spread(Ts, cir)
+% rms delay spread calculation
+timeline = (0:(length(cir)-1)).*Ts;
+pdp = (abs(cir).^2)./(timeline(end)); % |h(t)|^2 / T
+avg_ds = (pdp'*timeline')/sum(pdp);
+normalized_t = (timeline - avg_ds).^2;
+rms_ds = sqrt((pdp'*normalized_t')/sum(pdp));
 end

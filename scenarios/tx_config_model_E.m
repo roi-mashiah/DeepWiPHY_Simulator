@@ -1,5 +1,5 @@
 scenario = struct;
-addpath(".\helpers\")
+addpath("..\helpers\")
 
 % configure the transmission packet
 cfgHE = wlanHESUConfig;
