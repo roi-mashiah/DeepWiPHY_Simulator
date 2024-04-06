@@ -1,4 +1,5 @@
-
+helpers/ch_est_results*
+helpers/performance_figs
 *runs
 *.rar
 *data
