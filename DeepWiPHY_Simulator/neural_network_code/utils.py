@@ -5,6 +5,14 @@ from configuration import Configuration, asdict
 import torch
 from sklearn.preprocessing import StandardScaler
 import numpy as np
+from enum import Enum
+
+
+class ModelType(Enum):
+    delaySpreadEst = 1
+    autoEncoder = 2
+    smootherEst = 3
+    channelConvNetEst = 4
 
 
 def scale_vector(v):
@@ -22,7 +30,7 @@ def rmse(output, target):
 
 
 def load_config(p: str, log) -> Configuration:
-    with open(p, 'r') as r:
+    with open(p, "r") as r:
         config_json = json.load(r)
     config = Configuration.from_dict(config_json)
     log.info("Loaded Configuration")
@@ -46,15 +54,21 @@ def init_logger():
 def calculate_performance(gt, estimation, baseline_channel_est, metadata_dict):
     metadata_dict["nn_loss"] = list(range(np.shape(gt.numpy())[0]))
     metadata_dict["bl_loss"] = list(range(np.shape(gt.numpy())[0]))
-    metadata_dict['snr'] = metadata_dict['snr'].numpy()
-    metadata_dict['packet'] = metadata_dict['packet'].numpy()
+    metadata_dict["snr"] = metadata_dict["snr"].numpy()
+    metadata_dict["packet"] = metadata_dict["packet"].numpy()
     for i in range(np.shape(gt.numpy())[0]):
         curr_gt = gt.numpy()[i, :]
         curr_est = estimation.numpy()[i, :]
         curr_bl = baseline_channel_est.numpy()[i, :]
-        gt_abs = np.sqrt(np.sum(np.power(curr_gt.reshape([2, curr_est.shape[0] // 2]), 2), 0))
-        estimation_abs = np.sqrt(np.sum(np.power(curr_est.reshape([2, curr_gt.shape[0] // 2]), 2), 0))
-        baseline_estimation_abs = np.sqrt(np.sum(np.power(curr_bl.reshape([2, curr_bl.shape[0] // 2]), 2), 0))
+        gt_abs = np.sqrt(
+            np.sum(np.power(curr_gt.reshape([2, curr_est.shape[0] // 2]), 2), 0)
+        )
+        estimation_abs = np.sqrt(
+            np.sum(np.power(curr_est.reshape([2, curr_gt.shape[0] // 2]), 2), 0)
+        )
+        baseline_estimation_abs = np.sqrt(
+            np.sum(np.power(curr_bl.reshape([2, curr_bl.shape[0] // 2]), 2), 0)
+        )
         mse = np.round(np.mean((gt_abs - estimation_abs) ** 2), 5)
         bl_mse = np.round(np.mean((gt_abs - baseline_estimation_abs) ** 2), 5)
         metadata_dict["nn_loss"][i] = mse
