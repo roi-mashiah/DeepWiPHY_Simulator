@@ -4,16 +4,16 @@ from datetime import datetime
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 
-import utils
+
 from models import *
 from configuration import Configuration
 from dataset import WiPhyDataset
-from utils import ModelType
+from utils import *
 from performance_plots import *
 
 
@@ -21,6 +21,8 @@ def training_loop(data_loader, model, optimizer):
     model.train()
     losses = 0
     for X, y, _, _ in data_loader:
+        X = X.to(device)
+        y = y.to(device)
         y_predicted = model(X)  # get predicted results
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
         losses += loss.detach().numpy()
@@ -42,9 +44,7 @@ def testing_loop(dataloader, model, plot=False, save=True):
             pred = model(X)
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
-            metadata_dict = utils.calculate_performance(
-                y, pred, baseline_ch_est, packet_info
-            )
+            metadata_dict = calculate_performance(y, pred, baseline_ch_est, packet_info)
             results_dfs.append(
                 pd.DataFrame(metadata_dict, index=metadata_dict["packet"])
             )
@@ -59,20 +59,6 @@ def testing_loop(dataloader, model, plot=False, save=True):
     return test_loss
 
 
-def get_model_from_config(configuration: Configuration):
-    model = ModelType(configuration.model_type)
-    if model == ModelType.autoEncoder:
-        return AutoEncoderModel(criterion=nn.MSELoss())
-    elif model == ModelType.channelConvNetEst:
-        return ConvChannelEstimationModel(criterion=nn.MSELoss())
-    elif model == ModelType.delaySpreadEst:
-        return DelaySpreadEstimationModel(criterion=nn.MSELoss())
-    elif model == ModelType.smootherEst:
-        return SmootherEstimationModel(criterion=nn.MSELoss())
-    else:
-        raise TypeError(f"Unexpected model name - {configuration.model_type}, unknown")
-
-
 def train_test_ch_est_model(
     train_data_loader,
     test_data_loader,
@@ -80,6 +66,7 @@ def train_test_ch_est_model(
     reference_sequence,
 ):
     model = get_model_from_config(configuration)
+    model = model.to(device)
     optimizer = torch.optim.Adam(
         model.parameters(), lr=configuration.mu, weight_decay=configuration.w_decay
     )
@@ -94,31 +81,19 @@ def train_test_ch_est_model(
     return model, train_loss_over_epochs, test_loss_over_epochs
 
 
-def create_train_test_subsets(full_dataset, subset_size, test_perc):
-    # Create subset
-    subset_indices = torch.randperm(len(full_dataset))[:subset_size]
-    test_indices = subset_indices[: int(test_perc * subset_size)]
-    train_indices = subset_indices[int(test_perc * subset_size) :]
-    train_wiphy_datasubset = Subset(full_dataset, train_indices)
-    test_wiphy_datasubset = Subset(full_dataset, test_indices)
-    return train_wiphy_datasubset, test_wiphy_datasubset
-
-
 if __name__ == "__main__":
     writer = SummaryWriter(f"runs/{int(datetime.now().timestamp())}", flush_secs=5)
-    log = utils.init_logger()
+    log = init_logger()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f"Device: {device}\nStarting session...")
-    config_dir = (
-        "/home/tauproj3/Documents/DeepWiPHY_Simulator/neural_network_code/configs"
-    )
+    config_dir = "/home/tauproj3/Documents/DeepWiPHY_Simulator/neural_network_code/delay_spread_configs"
     configs = [os.path.join(config_dir, f) for f in os.listdir(config_dir)]
     sub_size = 50e3
     test_percentage = 0.2
     for config_path in configs:
         config_name = os.path.split(config_path)[-1].replace(".json", "")
+        config = load_config(config_path, log)
         torch.manual_seed(config.manual_seed)
-        config = utils.load_config(config_path, log)
         config.test_perc = 1
         wiphy_dataset = WiPhyDataset(config, is_train=False)
         train_dataset, test_dataset = create_train_test_subsets(

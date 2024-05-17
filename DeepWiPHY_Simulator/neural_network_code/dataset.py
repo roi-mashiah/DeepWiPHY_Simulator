@@ -49,9 +49,10 @@ class WiPhyDataset(Dataset):
         packet["group"] = (np.arange(242) // self.configuration.group_size) + 1
         packet["channel_est_real"] = fftshift(packet["channel_est_real"])
         packet["channel_est_imag"] = fftshift(packet["channel_est_imag"])
-        he_ltf = torch.FloatTensor(
-            np.concatenate((packet["HE_LTF_real"], packet["HE_LTF_imag"]))
+        he_ltf = torch.from_numpy(
+            np.vstack((packet["HE_LTF_real"].values, packet["HE_LTF_imag"]))
         )
+        # he_ltf initial size is (2, 242)
         channel = torch.FloatTensor(
             np.concatenate(
                 (
@@ -84,7 +85,7 @@ class WiPhyDataset(Dataset):
     @staticmethod
     def load_ref_sequence():
         sequence_df = pd.read_csv(
-            r"C:\Projects\DeepWiPHY\DeepWiPHY_Simulator\HE_LTF_SEQ.csv"
+            "/home/tauproj3/Documents/DeepWiPHY_Simulator/HE_LTF_SEQ.csv"
         )
         return sequence_df["seq"].values
 

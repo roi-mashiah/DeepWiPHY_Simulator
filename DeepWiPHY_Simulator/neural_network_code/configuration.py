@@ -12,7 +12,7 @@ class Configuration:
     ch_type: str = field(metadata={"json_key": "chType"})
     batch_size: int = field(metadata={"json_key": "batchSize"})
     snr_value: int = field(metadata={"json_key": "snrValue"})
-    node_counts: list = field(metadata={"json_key": "nodeCounts"})
+    node_counts: dict = field(metadata={"json_key": "nodeCounts"})
     model_type: str = field(metadata={"json_key": "modelType"})
     w_decay: float = field(metadata={"json_key": "lambda"})
 

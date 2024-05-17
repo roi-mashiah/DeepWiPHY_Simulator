@@ -3,9 +3,11 @@ import logging
 import colorlog
 from configuration import Configuration, asdict
 import torch
+from torch.utils.data import Subset
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 from enum import Enum
+from models import *
 
 
 class ModelType(Enum):
@@ -13,6 +15,43 @@ class ModelType(Enum):
     autoEncoder = 2
     smootherEst = 3
     channelConvNetEst = 4
+
+
+def create_train_test_subsets(full_dataset, subset_size, test_perc):
+    # Create subset
+    subset_indices = torch.randperm(len(full_dataset))[:subset_size]
+    test_indices = subset_indices[: int(test_perc * subset_size)]
+    train_indices = subset_indices[int(test_perc * subset_size) :]
+    train_wiphy_datasubset = Subset(full_dataset, train_indices)
+    test_wiphy_datasubset = Subset(full_dataset, test_indices)
+    return train_wiphy_datasubset, test_wiphy_datasubset
+
+
+def get_model_from_config(configuration: Configuration):
+    model = ModelType(configuration.model_type)
+    if model == ModelType.autoEncoder:
+        return AutoEncoderModel(criterion=nn.MSELoss())
+    elif model == ModelType.channelConvNetEst:
+        return ConvChannelEstimationModel(criterion=nn.MSELoss())
+    elif model == ModelType.delaySpreadEst:
+        return DelaySpreadEstimationModel(nn.MSELoss(), configuration.node_counts)
+    elif model == ModelType.smootherEst:
+        return SmootherEstimationModel(criterion=nn.MSELoss())
+    else:
+        raise TypeError(f"Unexpected model name - {configuration.model_type}, unknown")
+
+
+def get_layer_type(layer_name, values):
+    if "conv" in layer_name:
+        return torch.nn.Conv1d(
+            values["in_channels"], values["out_channels"], values["kernel_size"]
+        )
+    elif "fc" in layer_name:
+        return torch.nn.Linear(values["input_dim"], values["output_dim"])
+    elif "bn" in layer_name:
+        return torch.nn.BatchNorm1d(values["num_features"])
+    elif "aFunc" in layer_name:
+        return torch.relu if values == "relu" else None
 
 
 def scale_vector(v):
