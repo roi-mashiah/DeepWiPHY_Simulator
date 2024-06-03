@@ -20,7 +20,7 @@ snr = 12:4:40;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
 plot_ch = 0; plot_symb = 0; plot_perf=0;
-output_data_dir = "/mnt/data/deepWiPhyData/matfiles";
+output_data_dir = "/home/tauproj3/data/deepWiPhyData/matfiles";
 
 for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};

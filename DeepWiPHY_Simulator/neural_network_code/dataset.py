@@ -7,17 +7,19 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from configuration import Configuration
+from utils import ModelType
 
 
 class WiPhyDataset(Dataset):
     def __init__(
-        self,
-        configuration: Configuration,
-        is_train=True,
-        transform=None,
-        target_transform=None,
+            self,
+            configuration: Configuration,
+            is_train=True,
+            transform=None,
+            target_transform=None,
     ):
         self.ref_seq = self.load_ref_sequence()
+        self.model_type = ModelType[configuration.model_type]
         self.is_train = is_train
         self.filtered_data = pd.DataFrame()
         self.all_packets = pd.DataFrame()
@@ -41,31 +43,38 @@ class WiPhyDataset(Dataset):
         return len(self.packets)
 
     def __getitem__(self, idx):
+        idx = idx.detach().numpy()
         packet_path = self.packets.loc[idx, "path"]
         packet_info = self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict()
         with open(packet_path, "r") as file_reader:
             packet = json.load(file_reader)
 
         packet["group"] = (np.arange(242) // self.configuration.group_size) + 1
+        group_mask = packet["group"] == 1
         packet["channel_est_real"] = fftshift(packet["channel_est_real"])
         packet["channel_est_imag"] = fftshift(packet["channel_est_imag"])
         he_ltf = torch.from_numpy(
-            np.vstack((packet["HE_LTF_real"].values, packet["HE_LTF_imag"]))
-        )
-        # he_ltf initial size is (2, 242)
-        channel = torch.FloatTensor(
-            np.concatenate(
+            np.vstack(
                 (
-                    np.array(packet["channel_taps_real"])[packet["group"] == 1],
-                    np.array(packet["channel_taps_imag"])[packet["group"] == 1],
+                    np.array(packet["HE_LTF_real"], dtype=np.float32),
+                    np.array(packet["HE_LTF_imag"], dtype=np.float32)
                 )
             )
         )
-        channel_est = torch.FloatTensor(
-            np.concatenate(
+        # he_ltf initial size is (2, 242)
+        channel = torch.from_numpy(
+            np.vstack(
                 (
-                    np.array(packet["channel_est_real"])[packet["group"] == 1],
-                    np.array(packet["channel_est_imag"])[packet["group"] == 1],
+                    np.array(packet["channel_taps_real"], dtype=np.float32)[group_mask],
+                    np.array(packet["channel_taps_imag"], dtype=np.float32)[group_mask],
+                )
+            )
+        )
+        channel_est = torch.from_numpy(
+            np.vstack(
+                (
+                    packet["channel_est_real"][group_mask],
+                    packet["channel_est_imag"][group_mask],
                 )
             )
         )
@@ -73,10 +82,10 @@ class WiPhyDataset(Dataset):
             he_ltf = self.transform(he_ltf)
         if self.target_transform:
             channel = self.target_transform(channel)
-        if self.configuration.model_type == "delaySpreadEst":
+        if self.model_type == ModelType.delaySpreadEst:
             # label is the calculated delay spread
             return he_ltf, torch.FloatTensor(packet["rms_ds"]), channel_est, packet_info
-        elif self.configuration.model_type == "autoEncoder":
+        elif self.model_type == ModelType.autoEncoder:
             # input to the NN is the least squares estimation
             return channel_est, channel, channel_est, packet_info
         else:

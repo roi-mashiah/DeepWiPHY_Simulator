@@ -7,7 +7,7 @@ from torch.utils.data import Subset
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 from enum import Enum
-from models import *
+from models import ConvChannelEstimationModel, AutoEncoderModel, SmootherEstimationModel, DelaySpreadEstimationModel
 
 
 class ModelType(Enum):
@@ -21,37 +21,26 @@ def create_train_test_subsets(full_dataset, subset_size, test_perc):
     # Create subset
     subset_indices = torch.randperm(len(full_dataset))[:subset_size]
     test_indices = subset_indices[: int(test_perc * subset_size)]
-    train_indices = subset_indices[int(test_perc * subset_size) :]
+    train_indices = subset_indices[int(test_perc * subset_size):]
     train_wiphy_datasubset = Subset(full_dataset, train_indices)
     test_wiphy_datasubset = Subset(full_dataset, test_indices)
     return train_wiphy_datasubset, test_wiphy_datasubset
 
 
-def get_model_from_config(configuration: Configuration):
-    model = ModelType(configuration.model_type)
+def get_model_from_config(configuration: Configuration, reference_seq):
+    model = ModelType[configuration.model_type]
+    criterion = torch.nn.MSELoss()
+    nn_architecture = configuration.node_counts
     if model == ModelType.autoEncoder:
-        return AutoEncoderModel(criterion=nn.MSELoss())
+        return AutoEncoderModel(criterion, nn_architecture)
     elif model == ModelType.channelConvNetEst:
-        return ConvChannelEstimationModel(criterion=nn.MSELoss())
+        return ConvChannelEstimationModel(criterion, nn_architecture)
     elif model == ModelType.delaySpreadEst:
-        return DelaySpreadEstimationModel(nn.MSELoss(), configuration.node_counts)
+        return DelaySpreadEstimationModel(criterion, nn_architecture)
     elif model == ModelType.smootherEst:
-        return SmootherEstimationModel(criterion=nn.MSELoss())
+        return SmootherEstimationModel(criterion, nn_architecture, reference_seq)
     else:
         raise TypeError(f"Unexpected model name - {configuration.model_type}, unknown")
-
-
-def get_layer_type(layer_name, values):
-    if "conv" in layer_name:
-        return torch.nn.Conv1d(
-            values["in_channels"], values["out_channels"], values["kernel_size"]
-        )
-    elif "fc" in layer_name:
-        return torch.nn.Linear(values["input_dim"], values["output_dim"])
-    elif "bn" in layer_name:
-        return torch.nn.BatchNorm1d(values["num_features"])
-    elif "aFunc" in layer_name:
-        return torch.relu if values == "relu" else None
 
 
 def scale_vector(v):
@@ -91,22 +80,23 @@ def init_logger():
 
 
 def calculate_performance(gt, estimation, baseline_channel_est, metadata_dict):
-    metadata_dict["nn_loss"] = list(range(np.shape(gt.numpy())[0]))
-    metadata_dict["bl_loss"] = list(range(np.shape(gt.numpy())[0]))
+    batch_size = gt.shape[0]
+    metadata_dict["nn_loss"] = list(range(batch_size))
+    metadata_dict["bl_loss"] = list(range(batch_size))
     metadata_dict["snr"] = metadata_dict["snr"].numpy()
     metadata_dict["packet"] = metadata_dict["packet"].numpy()
-    for i in range(np.shape(gt.numpy())[0]):
+    for i in range(batch_size):
         curr_gt = gt.numpy()[i, :]
         curr_est = estimation.numpy()[i, :]
         curr_bl = baseline_channel_est.numpy()[i, :]
         gt_abs = np.sqrt(
-            np.sum(np.power(curr_gt.reshape([2, curr_est.shape[0] // 2]), 2), 0)
+            np.sum(np.power(curr_gt, 2), 0)
         )
         estimation_abs = np.sqrt(
-            np.sum(np.power(curr_est.reshape([2, curr_gt.shape[0] // 2]), 2), 0)
+            np.sum(np.power(curr_est, 2), 0)
         )
         baseline_estimation_abs = np.sqrt(
-            np.sum(np.power(curr_bl.reshape([2, curr_bl.shape[0] // 2]), 2), 0)
+            np.sum(np.power(curr_bl, 2), 0)
         )
         mse = np.round(np.mean((gt_abs - estimation_abs) ** 2), 5)
         bl_mse = np.round(np.mean((gt_abs - baseline_estimation_abs) ** 2), 5)

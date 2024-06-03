@@ -3,23 +3,40 @@
   "mu": 3e-4,
   "batchSize": 64,
   "trainingIterations": 10,
-  "nodeCounts": 
-    {
-      "conv1": {"input_channels": 2, "output_channels": 2, "kernel_size": 5},
-      "aFunc1": "relu",
-      "conv2": {"input_channels": 2, "output_channels": 1, "kernel_size": 3},
-      "aFunc2": "relu",
-      "fc1": {"input_dim": 236, "output_dim": 128},
-      "bn1": {"num_features": 128},
-      "fc2": {"input_dim": 128, "output_dim": 32},
-      "fc3": {"input_dim": 32, "output_dim": 1}
+  "nodeCounts": {
+    "conv1": {
+      "input_channels": 2,
+      "output_channels": 2,
+      "kernel_size": 5
+    },
+    "aFunc1": "relu",
+    "conv2": {
+      "input_channels": 2,
+      "output_channels": 1,
+      "kernel_size": 3
+    },
+    "aFunc2": "relu",
+    "fc1": {
+      "input_dim": 236,
+      "output_dim": 128
+    },
+    "bn1": {
+      "num_features": 128
+    },
+    "fc2": {
+      "input_dim": 128,
+      "output_dim": 32
+    },
+    "fc3": {
+      "input_dim": 32,
+      "output_dim": 1
     }
-  ,
+  },
   "lambda": 1e-5,
   "modelType": "delaySpreadEst",
-  "groupSize": 32,
+  "groupSize": 242,
   "testPerc": 0.2,
-  "dataPath": "C:\\Projects\\DeepWiPHY\\DeepWiPHY_Simulator\\data",
+  "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",
   "chType": null,
   "snrValue": null
 }

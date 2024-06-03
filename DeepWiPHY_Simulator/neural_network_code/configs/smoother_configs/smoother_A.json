@@ -11,14 +11,14 @@
       "aFunc2": "relu",
       "fc1": {"input_dim": 224, "output_dim": 64},
       "bn1": {"num_features": 64},
-      "fc2": {"input_dim": 64, "output_dim": 16}      
+      "fc2": {"input_dim": 64, "output_dim": 15}      
     }
   ,
   "lambda": 1e-5,
   "modelType": "delaySpreadEst",
-  "groupSize": 32,
+  "groupSize": 242,
   "testPerc": 0.2,
-  "dataPath": "C:\\Projects\\DeepWiPHY\\DeepWiPHY_Simulator\\data",
+  "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",
   "chType": null,
   "snrValue": null
 }
