@@ -84,7 +84,7 @@ class WiPhyDataset(Dataset):
             channel = self.target_transform(channel)
         if self.model_type == ModelType.delaySpreadEst:
             # label is the calculated delay spread
-            return he_ltf, torch.FloatTensor(packet["rms_ds"]), channel_est, packet_info
+            return he_ltf, torch.FloatTensor(packet["rms_ds"]), channel, packet_info
         elif self.model_type == ModelType.autoEncoder:
             # input to the NN is the least squares estimation
             return channel_est, channel, channel_est, packet_info

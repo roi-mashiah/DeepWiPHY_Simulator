@@ -53,8 +53,9 @@ class ChannelEstimationModel(nn.Module):
 
 
 class DelaySpreadEstimationModel(nn.Module):
-    def __init__(self, criterion, node_counts):
+    def __init__(self, criterion, node_counts, ref_sequence):
         super().__init__()
+        self.reference_sequence = ref_sequence
         self.criterion = criterion
         self.node_counts = node_counts
         for layer_name, params in node_counts.items():

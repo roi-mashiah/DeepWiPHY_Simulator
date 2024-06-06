@@ -36,7 +36,7 @@ def get_model_from_config(configuration: Configuration, reference_seq):
     elif model == ModelType.channelConvNetEst:
         return ConvChannelEstimationModel(criterion, nn_architecture)
     elif model == ModelType.delaySpreadEst:
-        return DelaySpreadEstimationModel(criterion, nn_architecture)
+        return DelaySpreadEstimationModel(criterion, nn_architecture, reference_seq)
     elif model == ModelType.smootherEst:
         return SmootherEstimationModel(criterion, nn_architecture, reference_seq)
     else:
@@ -89,17 +89,40 @@ def calculate_performance(gt, estimation, baseline_channel_est, metadata_dict):
         curr_gt = gt.numpy()[i, :]
         curr_est = estimation.numpy()[i, :]
         curr_bl = baseline_channel_est.numpy()[i, :]
-        gt_abs = np.sqrt(
-            np.sum(np.power(curr_gt, 2), 0)
-        )
-        estimation_abs = np.sqrt(
-            np.sum(np.power(curr_est, 2), 0)
-        )
-        baseline_estimation_abs = np.sqrt(
-            np.sum(np.power(curr_bl, 2), 0)
-        )
-        mse = np.round(np.mean((gt_abs - estimation_abs) ** 2), 5)
-        bl_mse = np.round(np.mean((gt_abs - baseline_estimation_abs) ** 2), 5)
-        metadata_dict["nn_loss"][i] = mse
-        metadata_dict["bl_loss"][i] = bl_mse
+        gt_abs = calculate_absolute_value(curr_gt)
+        estimation_abs = calculate_absolute_value(curr_est)
+        baseline_estimation_abs = calculate_absolute_value(curr_bl)
+        metadata_dict["nn_loss"][i] = calculate_mse(gt_abs, estimation_abs)
+        metadata_dict["bl_loss"][i] = calculate_mse(gt_abs, baseline_estimation_abs)
     return metadata_dict
+
+
+def calculate_absolute_value(vector):
+    return np.sqrt(np.sum(np.power(vector, 2), 0))
+
+
+def calculate_mse(x, y):
+    return np.round(np.mean((x - y) ** 2), 5)
+
+
+def calculate_ds_performance(gt, rms_ds, baseline_channel_est, metadata_dict):
+    batch_size = gt.shape[0]
+    metadata_dict["nn_loss"] = list(range(batch_size))
+    metadata_dict["bl_loss"] = list(range(batch_size))
+    metadata_dict["snr"] = metadata_dict["snr"].numpy()
+    metadata_dict["packet"] = metadata_dict["packet"].numpy()
+    for i in range(batch_size):
+        curr_gt = gt.numpy()[i, :]
+        curr_rms_ds_est = rms_ds.numpy()[i, :]
+        curr_bl = baseline_channel_est.numpy()[i, :]
+        gt_abs = calculate_absolute_value(curr_gt)
+        baseline_estimation_abs = calculate_absolute_value(curr_bl)
+        # use rms ds estimation to decide smoother
+        estimation_abs = smoothing_filter(curr_bl, curr_rms_ds_est)
+        metadata_dict["nn_loss"][i] = calculate_mse(gt_abs, estimation_abs)
+        metadata_dict["bl_loss"][i] = calculate_mse(gt_abs, baseline_estimation_abs)
+    return metadata_dict
+
+
+def smoothing_filter(h_ls, rms_ds):
+    pass

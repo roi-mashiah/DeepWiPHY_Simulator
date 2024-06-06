@@ -21,7 +21,7 @@ def training_loop(data_loader, model, optimizer):
         y = y.to(device)
         y_predicted = model(X)  # get predicted results
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
-        losses += loss.detach().cpu().numpy() if device.type == "cuda" else loss.detach().numpy()
+        losses += loss.detach().cpu().numpy()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -29,7 +29,7 @@ def training_loop(data_loader, model, optimizer):
     return losses
 
 
-def testing_loop(dataloader, model, plot=False, save=True):
+def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=True):
     model.eval()
     num_batches = len(dataloader)
     test_loss = 0
@@ -42,7 +42,12 @@ def testing_loop(dataloader, model, plot=False, save=True):
             pred = model(X)
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
-            metadata_dict = calculate_performance(y.cpu(), pred.cpu(), baseline_ch_est, packet_info)
+            if model_type == ModelType.delaySpreadEst:
+                # baseline_ch_est is the gt CIR, X is HE-LTF, y is gt RMS DS
+                h_ls = X.cpu() / model.reference_sequence # baseline estimation
+                metadata_dict = calculate_ds_performance(baseline_ch_est, pred.cpu(), h_ls, packet_info)
+            else:
+                metadata_dict = calculate_performance(y.cpu(), pred.cpu(), baseline_ch_est, packet_info)
             results_dfs.append(
                 pd.DataFrame(metadata_dict, index=metadata_dict["packet"])
             )
@@ -64,6 +69,7 @@ def train_test_ch_est_model(
         reference_sequence,
 ):
     model = get_model_from_config(configuration, reference_sequence)
+    model_type = ModelType[configuration.model_type]
     model = model.to(device)
     optimizer = torch.optim.Adam(
         model.parameters(), lr=configuration.mu, weight_decay=configuration.w_decay
@@ -72,7 +78,7 @@ def train_test_ch_est_model(
     test_loss_over_epochs = []
     for t in range(configuration.training_iterations):
         curr_tr_loss = training_loop(train_data_loader, model, optimizer)
-        curr_test_loss = testing_loop(test_data_loader, model)
+        curr_test_loss = validation_loop(test_data_loader, model, model_type)
         train_loss_over_epochs.append(curr_tr_loss)
         test_loss_over_epochs.append(curr_test_loss)
 
