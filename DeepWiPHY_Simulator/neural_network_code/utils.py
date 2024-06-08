@@ -125,4 +125,4 @@ def calculate_ds_performance(gt, rms_ds, baseline_channel_est, metadata_dict):
 
 
 def smoothing_filter(h_ls, rms_ds):
-    pass
+    return h_ls

@@ -3,10 +3,14 @@ from torch import relu
 import torch
 
 
-def get_layer_type(layer_name, values):
+def get_layer_type(layer_name, values: dict):
     if "conv" in layer_name:
         return torch.nn.Conv1d(
-            values["input_channels"], values["output_channels"], values["kernel_size"]
+            values["input_channels"],
+            values["output_channels"],
+            values["kernel_size"],
+            stride=values.get("stride", 1),
+            padding=values.get("padding", 0)
         )
     elif "fc" in layer_name:
         return torch.nn.Linear(values["input_dim"], values["output_dim"])
@@ -22,6 +26,8 @@ def get_layer_type(layer_name, values):
             values["output_channels"],
             values["kernel_size"],
             values["stride"],
+            values.get("padding", 0),
+            values.get("output_padding", 0)
         )
     elif "view" in layer_name:
         return lambda x: x.view(*values["args"])
@@ -61,6 +67,7 @@ class DelaySpreadEstimationModel(nn.Module):
         for layer_name, params in node_counts.items():
             layer = get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
+        self.double()
 
     def forward(self, x):
         for layer_name in self.node_counts.keys():
@@ -77,6 +84,7 @@ class ConvChannelEstimationModel(nn.Module):
         for layer_name, params in node_counts.items():
             layer = get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
+        self.double()
 
     def forward(self, x):
         for layer_name in self.node_counts.keys():
@@ -106,13 +114,15 @@ class SmootherEstimationModel(nn.Module):
     def __init__(self, criterion, node_counts, ref_sequence):
         super().__init__()
         self.criterion = criterion
+        self.node_counts = node_counts
         self.sequence = ref_sequence
         for layer_name, params in node_counts.items():
             layer = get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
+        self.double()
 
     def forward(self, x):
-        h_ls = x / self.sequence
+        h_ls = x.cpu() / self.sequence
         for layer_name in self.node_counts.keys():
             layer = getattr(self, layer_name)
             x = layer(x)
@@ -120,7 +130,7 @@ class SmootherEstimationModel(nn.Module):
         conv_out = nn.Conv1d(2, 2, kernel_size=x.shape[1], padding="same", groups=2)
         weights = torch.mean(x, 0)  # size (2, M)
         place_holder = torch.zeros_like(conv_out.weight)
-        place_holder[:, 1, :] = weights
-        conv_out.weight = nn.Parameter(place_holder, requires_grad=False)
+        place_holder[:, 0, :] = weights.view(-1, 1, x.shape[1])
+        conv_out.weight = nn.Parameter(place_holder.double(), requires_grad=True)
         h = conv_out(h_ls)
         return h

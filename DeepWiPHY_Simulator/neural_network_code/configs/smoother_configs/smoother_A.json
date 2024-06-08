@@ -2,20 +2,37 @@
   "manualSeed": 64,
   "mu": 3e-4,
   "batchSize": 64,
-  "trainingIterations": 10,
-  "nodeCounts": 
-    {
-      "conv1": {"input_channels": 2, "output_channels": 2, "kernel_size": 10},
-      "aFunc1": "relu",
-      "conv2": {"input_channels": 2, "output_channels": 2, "kernel_size": 10},
-      "aFunc2": "relu",
-      "fc1": {"input_dim": 224, "output_dim": 64},
-      "bn1": {"num_features": 64},
-      "fc2": {"input_dim": 64, "output_dim": 15}      
+  "trainingIterations": 20,
+  "nodeCounts": {
+    "conv1": {
+      "input_channels": 2,
+      "output_channels": 2,
+      "kernel_size": 10
+    },
+    "aFunc1": "relu",
+    "conv2": {
+      "input_channels": 2,
+      "output_channels": 2,
+      "kernel_size": 10
+    },
+    "aFunc2": "relu",
+    "fc1": {
+      "input_dim": 224,
+      "output_dim": 64
+    },
+    "view1": {
+      "args": [-1, 64]
+    },
+    "bn1": {
+      "num_features": 64
+    },
+    "fc2": {
+      "input_dim": 64,
+      "output_dim": 9
     }
-  ,
+  },
   "lambda": 1e-5,
-  "modelType": "delaySpreadEst",
+  "modelType": "smootherEst",
   "groupSize": 242,
   "testPerc": 0.2,
   "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",

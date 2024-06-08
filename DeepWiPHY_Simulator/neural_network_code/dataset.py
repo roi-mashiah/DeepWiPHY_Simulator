@@ -56,8 +56,8 @@ class WiPhyDataset(Dataset):
         he_ltf = torch.from_numpy(
             np.vstack(
                 (
-                    np.array(packet["HE_LTF_real"], dtype=np.float32),
-                    np.array(packet["HE_LTF_imag"], dtype=np.float32)
+                    np.array(packet["HE_LTF_real"], dtype=np.double),
+                    np.array(packet["HE_LTF_imag"], dtype=np.double)
                 )
             )
         )
@@ -65,16 +65,16 @@ class WiPhyDataset(Dataset):
         channel = torch.from_numpy(
             np.vstack(
                 (
-                    np.array(packet["channel_taps_real"], dtype=np.float32)[group_mask],
-                    np.array(packet["channel_taps_imag"], dtype=np.float32)[group_mask],
+                    np.array(packet["channel_taps_real"], dtype=np.double)[group_mask],
+                    np.array(packet["channel_taps_imag"], dtype=np.double)[group_mask],
                 )
             )
         )
         channel_est = torch.from_numpy(
             np.vstack(
                 (
-                    packet["channel_est_real"][group_mask],
-                    packet["channel_est_imag"][group_mask],
+                    np.array(packet["channel_est_real"], dtype=np.double)[group_mask],
+                    np.array(packet["channel_est_imag"], dtype=np.double)[group_mask],
                 )
             )
         )
@@ -84,7 +84,7 @@ class WiPhyDataset(Dataset):
             channel = self.target_transform(channel)
         if self.model_type == ModelType.delaySpreadEst:
             # label is the calculated delay spread
-            return he_ltf, torch.FloatTensor(packet["rms_ds"]), channel, packet_info
+            return he_ltf.double(), np.double(packet["rms_ds"]), channel, packet_info
         elif self.model_type == ModelType.autoEncoder:
             # input to the NN is the least squares estimation
             return channel_est, channel, channel_est, packet_info
@@ -94,7 +94,7 @@ class WiPhyDataset(Dataset):
     @staticmethod
     def load_ref_sequence():
         sequence_df = pd.read_csv(
-            "/home/tauproj3/Documents/DeepWiPHY_Simulator/HE_LTF_SEQ.csv"
+            "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/HE_LTF_SEQ.csv"
         )
         return sequence_df["seq"].values
 

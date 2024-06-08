@@ -20,6 +20,7 @@ def training_loop(data_loader, model, optimizer):
         X = X.to(device)
         y = y.to(device)
         y_predicted = model(X)  # get predicted results
+        y_predicted = y_predicted.to(device)
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
         losses += loss.detach().cpu().numpy()
         optimizer.zero_grad()
@@ -40,11 +41,12 @@ def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=T
             X = X.to(device)
             y = y.to(device)
             pred = model(X)
+            pred = pred.to(device)
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
             if model_type == ModelType.delaySpreadEst:
                 # baseline_ch_est is the gt CIR, X is HE-LTF, y is gt RMS DS
-                h_ls = X.cpu() / model.reference_sequence # baseline estimation
+                h_ls = X.cpu() / model.reference_sequence  # baseline estimation
                 metadata_dict = calculate_ds_performance(baseline_ch_est, pred.cpu(), h_ls, packet_info)
             else:
                 metadata_dict = calculate_performance(y.cpu(), pred.cpu(), baseline_ch_est, packet_info)
@@ -55,7 +57,7 @@ def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=T
         plot_performance(pd.concat(results_dfs), (writer, config_name))
     if save:
         pd.concat(results_dfs).to_csv(
-            rf"C:\Projects\DeepWiPHY\DeepWiPHY_Simulator\helpers\ch_est_results_{config_name.split('.')[0]}.csv"
+            rf"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results/{config_name.split('.')[0]}_results.csv"
         )
 
     test_loss /= num_batches
@@ -109,19 +111,20 @@ def main_loop(config_path):
 
 
 if __name__ == "__main__":
-    writer = SummaryWriter(f"runs/{int(datetime.now().timestamp())}", flush_secs=5)
+    tb_log_dir = f"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/runs/{int(datetime.now().timestamp())}"
+    writer = SummaryWriter(tb_log_dir, flush_secs=5)
     log = init_logger()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f"Device: {device}\nStarting session...")
     config_dir = (
-        "/home/tauproj3/Documents/DeepWiPHY_Simulator/neural_network_code/configs"
+        "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/neural_network_code/configs"
     )
     configs = [
         f
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
         if not "older" in f and f.endswith(".json")
     ]
-    sub_size = int(1e3)
+    sub_size = int(70e3)
     test_percentage = 0.2
     for config_path in configs:
         config_name = os.path.split(config_path)[-1].replace(".json", "")
