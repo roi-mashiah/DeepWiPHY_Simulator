@@ -1,6 +1,6 @@
 {
   "manualSeed": 64,
-  "mu": 3e-4,
+  "mu": 9e-4,
   "batchSize": 64,
   "trainingIterations": 20,
   "nodeCounts": {
@@ -20,18 +20,22 @@
       "input_dim": 224,
       "output_dim": 64
     },
-    "view1": {
-      "args": [-1, 64]
+    "reshape1": {
+      "args": [
+        -1,
+        128
+      ]
     },
     "bn1": {
-      "num_features": 64
+      "num_features": 128
     },
     "fc2": {
-      "input_dim": 64,
-      "output_dim": 9
-    }
+      "input_dim": 128,
+      "output_dim": 13
+    },
+    "aFunc3": "tanh"
   },
-  "lambda": 1e-5,
+  "lambda": 1e-4,
   "modelType": "smootherEst",
   "groupSize": 242,
   "testPerc": 0.2,

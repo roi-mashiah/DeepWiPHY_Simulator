@@ -1,6 +1,8 @@
 import torch.nn as nn
 from torch import relu
+from torch.nn.functional import conv1d
 import torch
+from torch.fft import fftshift
 
 
 def get_layer_type(layer_name, values: dict):
@@ -17,7 +19,7 @@ def get_layer_type(layer_name, values: dict):
     elif "bn" in layer_name:
         return torch.nn.BatchNorm1d(values["num_features"])
     elif "aFunc" in layer_name:
-        return torch.relu if values == "relu" else None
+        return torch.relu if values == "relu" else torch.tanh
     elif "pool" in layer_name:
         return torch.nn.MaxPool1d(values["kernel_size"], values["stride"])
     elif "cTrans" in layer_name:
@@ -31,6 +33,8 @@ def get_layer_type(layer_name, values: dict):
         )
     elif "view" in layer_name:
         return lambda x: x.view(*values["args"])
+    elif "reshape" in layer_name:
+        return lambda x: x.reshape(*values["args"])
 
 
 class ChannelEstimationModel(nn.Module):
@@ -102,6 +106,7 @@ class AutoEncoderModel(nn.Module):
         for layer_name, params in node_counts.items():
             layer = get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
+        self.double()
 
     def forward(self, x):
         for layer_name in self.node_counts.keys():
@@ -116,21 +121,23 @@ class SmootherEstimationModel(nn.Module):
         self.criterion = criterion
         self.node_counts = node_counts
         self.sequence = ref_sequence
+        self.scale_factor = nn.Parameter(torch.tensor(10.0))
         for layer_name, params in node_counts.items():
             layer = get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
         self.double()
 
     def forward(self, x):
-        h_ls = x.cpu() / self.sequence
+        h_ls = fftshift(x.cpu() / self.sequence)
         for layer_name in self.node_counts.keys():
             layer = getattr(self, layer_name)
             x = layer(x)
         # x is the smoothing filter of size (batch_size, 2, M)
-        conv_out = nn.Conv1d(2, 2, kernel_size=x.shape[1], padding="same", groups=2)
-        weights = torch.mean(x, 0)  # size (2, M)
-        place_holder = torch.zeros_like(conv_out.weight)
-        place_holder[:, 0, :] = weights.view(-1, 1, x.shape[1])
-        conv_out.weight = nn.Parameter(place_holder.double(), requires_grad=True)
-        h = conv_out(h_ls)
-        return h
+        filters = torch.mean(x, 0).view(1, 1, x.shape[-1])  # output channels = 1, input channels = 1, kernel size
+        h = torch.zeros_like(h_ls)
+        batch_size, in_channels, iW = h_ls.shape
+        for i in range(in_channels):
+            input_signal = h_ls[:, i, :].view(batch_size, 1, iW)
+            filtered = conv1d(input_signal, filters.cpu(), padding="same")
+            h[:, i, :] = filtered.view(-1, batch_size, iW)
+        return h * self.scale_factor.cpu()

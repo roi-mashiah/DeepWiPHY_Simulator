@@ -19,8 +19,7 @@ def training_loop(data_loader, model, optimizer):
     for X, y, _, _ in data_loader:
         X = X.to(device)
         y = y.to(device)
-        y_predicted = model(X)  # get predicted results
-        y_predicted = y_predicted.to(device)
+        y_predicted = model(X).to(device)  # get predicted results
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
         losses += loss.detach().cpu().numpy()
         optimizer.zero_grad()
@@ -40,14 +39,13 @@ def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=T
         for X, y, baseline_ch_est, packet_info in dataloader:
             X = X.to(device)
             y = y.to(device)
-            pred = model(X)
-            pred = pred.to(device)
+            pred = model(X).to(device)
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
             if model_type == ModelType.delaySpreadEst:
                 # baseline_ch_est is the gt CIR, X is HE-LTF, y is gt RMS DS
                 h_ls = X.cpu() / model.reference_sequence  # baseline estimation
-                metadata_dict = calculate_ds_performance(baseline_ch_est, pred.cpu(), h_ls, packet_info)
+                metadata_dict = calculate_ds_performance(baseline_ch_est, X.cpu(), pred.cpu(), h_ls, packet_info)
             else:
                 metadata_dict = calculate_performance(y.cpu(), pred.cpu(), baseline_ch_est, packet_info)
             results_dfs.append(
@@ -124,9 +122,9 @@ if __name__ == "__main__":
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
         if not "older" in f and f.endswith(".json")
     ]
-    sub_size = int(70e3)
+    sub_size = int(10e3)
     test_percentage = 0.2
-    for config_path in configs:
+    for config_path in configs[3:]:
         config_name = os.path.split(config_path)[-1].replace(".json", "")
         main_loop(config_path)
     writer.close()

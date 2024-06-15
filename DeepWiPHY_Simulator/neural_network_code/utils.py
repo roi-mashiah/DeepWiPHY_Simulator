@@ -105,24 +105,29 @@ def calculate_mse(x, y):
     return np.round(np.mean((x - y) ** 2), 5)
 
 
-def calculate_ds_performance(gt, rms_ds, baseline_channel_est, metadata_dict):
-    batch_size = gt.shape[0]
+def calculate_ds_performance(gt_cir, he_ltf, rms_ds, baseline_channel_est, metadata_dict):
+    batch_size = gt_cir.shape[0]
     metadata_dict["nn_loss"] = list(range(batch_size))
     metadata_dict["bl_loss"] = list(range(batch_size))
     metadata_dict["snr"] = metadata_dict["snr"].numpy()
     metadata_dict["packet"] = metadata_dict["packet"].numpy()
     for i in range(batch_size):
-        curr_gt = gt.numpy()[i, :]
+        curr_gt = gt_cir.numpy()[i, :]
         curr_rms_ds_est = rms_ds.numpy()[i, :]
         curr_bl = baseline_channel_est.numpy()[i, :]
         gt_abs = calculate_absolute_value(curr_gt)
         baseline_estimation_abs = calculate_absolute_value(curr_bl)
         # use rms ds estimation to decide smoother
-        estimation_abs = smoothing_filter(curr_bl, curr_rms_ds_est)
+        estimation_abs = smoothing_filter(he_ltf, curr_rms_ds_est)
         metadata_dict["nn_loss"][i] = calculate_mse(gt_abs, estimation_abs)
         metadata_dict["bl_loss"][i] = calculate_mse(gt_abs, baseline_estimation_abs)
     return metadata_dict
 
 
-def smoothing_filter(h_ls, rms_ds):
-    return h_ls
+def smoothing_filter(he_ltf, rms_ds, snr):
+    delta_f = 20e6 / 256  # sub-carrier spacing
+    m = 5  # number of taps
+    m_range = torch.arange(-(m - 1) / 2, (m - 1) / 2)
+    sigma_squared = 1 / (10 ** (snr / 20))  # noise power assuming signal power is normalized
+    r_hh = torch.sinc(m_range * delta_f * rms_ds)
+

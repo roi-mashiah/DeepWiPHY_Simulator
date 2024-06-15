@@ -1,8 +1,8 @@
 {
   "manualSeed": 64,
-  "mu": 3e-4,
+  "mu": 6e-4,
   "batchSize": 64,
-  "trainingIterations": 20,
+  "trainingIterations": 80,
   "nodeCounts": {
     "conv1": {
       "input_channels": 2,
@@ -59,7 +59,7 @@
       "output_padding": 1
     }
   },
-  "lambda": 1e-5,
+  "lambda": 1e-4,
   "modelType": "autoEncoder",
   "groupSize": 242,
   "testPerc": 0.2,
