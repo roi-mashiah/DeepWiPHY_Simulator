@@ -1,5 +1,8 @@
 helpers/ch_est_results*
 helpers/performance_figs
+*.csv
+*.pt
+*.png
 *runs
 *.rar
 *data

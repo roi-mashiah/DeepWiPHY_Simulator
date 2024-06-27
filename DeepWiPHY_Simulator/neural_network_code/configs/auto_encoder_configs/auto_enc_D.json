@@ -1,0 +1,65 @@
+{
+  "manualSeed": 87,
+  "mu": 3e-4,
+  "batchSize": 256,
+  "trainingIterations": 80,
+  "nodeCounts": {
+    "conv1": {
+      "input_channels": 2,
+      "output_channels": 24,
+      "kernel_size": 3,
+      "stride": 2
+    },
+    "aFunc1": "relu",
+    "pool1": {
+      "kernel_size": 4,
+      "stride": 2
+    },
+    "conv2": {
+      "input_channels": 24,
+      "output_channels": 48,
+      "kernel_size": 2,
+      "stride": 2
+    },
+    "aFunc2": "relu",
+    "pool2": {
+      "kernel_size": 7,
+      "stride": 2
+    },
+    "cTrans1": {
+      "input_channels": 48,
+      "output_channels": 24,
+      "kernel_size": 3,
+      "stride": 3,
+      "padding": 0
+    },
+    "aFunc4": "relu",
+    "cTrans2": {
+      "input_channels": 24,
+      "output_channels": 12,
+      "kernel_size": 7,
+      "stride": 3,
+      "padding": 0
+    },
+    "aFunc5": "relu",
+    "cTrans3": {
+      "input_channels": 12,
+      "output_channels": 2,
+      "kernel_size": 5,
+      "stride": 2,
+      "padding": 0
+    },
+    "aFunc6": "tanh",
+    "fc1": {
+      "input_dim": 227,
+      "output_dim": 242
+    }
+  },
+  "lambda": 3e-5,
+  "modelType": "autoEncoder",
+  "groupSize": 242,
+  "testPerc": 0.1,
+  "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",
+  "chType": null,
+  "snrValue": null
+}
