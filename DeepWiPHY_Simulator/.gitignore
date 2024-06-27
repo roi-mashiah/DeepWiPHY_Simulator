@@ -3,6 +3,7 @@ helpers/performance_figs
 *.csv
 *.pt
 *.png
+*.idea
 *runs
 *.rar
 *data
