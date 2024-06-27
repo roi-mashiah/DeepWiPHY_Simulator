@@ -2,12 +2,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from torch import FloatTensor
+from os import path
 
 
 def plot_loss_curves(epochs, train_losses, test_losses, title_str, writer):
     f = plt.figure(figsize=(15, 12))
-    plt.plot(range(epochs), train_losses)
-    plt.plot(range(epochs), test_losses)
+    if "ds" in title_str:
+        plt.semilogy(range(epochs), train_losses)
+        plt.semilogy(range(epochs), test_losses)
+    else:
+        plt.plot(range(epochs), train_losses)
+        plt.plot(range(epochs), test_losses)
     plt.grid()
     plt.xlabel("Number of training iterations")
     plt.ylabel("Loss")
@@ -35,7 +40,7 @@ def get_ccdf(data: np.ndarray, N=10000):
 
 
 def plot_performance(results_df, args):
-    writer, config_name = args
+    writer, config_name, f = args
     for snr, snr_sub_df in results_df.groupby("snr"):
         i = 0
         f = plt.figure(figsize=(15, 12))
@@ -64,8 +69,32 @@ def plot_performance(results_df, args):
     plt.show()
 
 
+def plot_performance_all(results_df):
+    for snr, snr_sub_df in results_df.groupby("snr"):
+        i = 0
+        f = plt.figure(figsize=(15, 12))
+        for channel, ch_sub_df in snr_sub_df.groupby("ch"):
+            plt.subplot(2, 3, i + 1, title=f"Channel {channel}")
+            for config_name, config_df in ch_sub_df.groupby("config_name"):
+                nn_ccdf = get_ccdf(
+                (config_df.nn_loss / config_df.bl_loss).values.reshape(
+                    config_df.shape[0], 1
+                )
+            )
+                change_index = np.argwhere(nn_ccdf["x"] > 0)[0]
+                losing_probability = nn_ccdf["ccdf"][change_index]
+                free_text = f"{config_name}\nN={config_df.shape[0]}\nPr(BL<NN)={round(losing_probability[0], 3)}"
+                plt.semilogy(nn_ccdf["x"], nn_ccdf["ccdf"], label=free_text)
+                    # plt.ylim([10e-4, 1])
+            plt.grid()
+            plt.legend()
+            i += 1
+        f.suptitle(f"SNR: {snr}")
+        f.savefig(f"all_results_snr_{int(snr)}.png")
+    plt.show()
+
 def plot_channel_reconstruction(
-    gt: FloatTensor, estimation: FloatTensor, baseline_channel_est, metadata, writer
+        gt: FloatTensor, estimation: FloatTensor, baseline_channel_est, metadata, writer
 ):
     for i in range(np.shape(gt.numpy())[0]):
         curr_gt = gt.numpy()[i, :]
@@ -98,6 +127,15 @@ def plot_channel_reconstruction(
 
 
 if __name__ == "__main__":
-    res = pd.read_csv(r"..\helpers\ch_est_results_config_M.csv")
-    plot_performance(res, [None, ""])
+    base_results_dir = "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results"
+    best_results = ["auto_enc_C", "cnn_C","smoother_E"]
+    postfix = "_results.csv"
+    dfs = []
+    for res_name in best_results:
+        res_path = path.join(base_results_dir, res_name + postfix)
+        res = pd.read_csv(res_path)
+        res["config_name"] = res_name
+        dfs.append(res)
+    all_results = pd.concat(dfs, ignore_index=True)
+    plot_performance_all(all_results)
     pass

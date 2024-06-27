@@ -1,0 +1,49 @@
+{
+  "manualSeed": 64,
+  "mu": 5e-4,
+  "batchSize": 32,
+  "trainingIterations": 40,
+  "nodeCounts": {
+    "conv1": {
+      "input_channels": 2,
+      "output_channels": 8,
+      "kernel_size": 5
+    },
+    "aFunc1": "relu",
+    "conv2": {
+      "input_channels": 8,
+      "output_channels": 4,
+      "kernel_size": 3
+    },
+    "aFunc2": "relu",
+    "fc1": {
+      "input_dim": 236,
+      "output_dim": 128
+    },
+    "view1": {
+      "args": [
+        -1,
+        512
+      ]
+    },
+    "bn1": {
+      "num_features": 512
+    },
+    "aFunc": "relu",
+    "fc2": {
+      "input_dim": 512,
+      "output_dim": 32
+    },
+    "fc3": {
+      "input_dim": 32,
+      "output_dim": 1
+    }
+  },
+  "lambda": 1e-5,
+  "modelType": "delaySpreadEst",
+  "groupSize": 242,
+  "testPerc": 0.2,
+  "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",
+  "chType": null,
+  "snrValue": null
+}

@@ -4,13 +4,14 @@ from datetime import datetime
 
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchsummary import summary
 
 from dataset import WiPhyDataset
 from utils import *
 from performance_plots import *
 
 
-def training_loop(data_loader, model, optimizer):
+def training_loop(data_loader: DataLoader, model, optimizer):
     """
     This function loops on batches (per one EPOCH)
     """
@@ -19,10 +20,10 @@ def training_loop(data_loader, model, optimizer):
     for X, y, _, _ in data_loader:
         X = X.to(device)
         y = y.to(device)
+        optimizer.zero_grad()
         y_predicted = model(X).to(device)  # get predicted results
         loss = model.criterion(y_predicted, y)  # predicted values vs y_train
         losses += loss.detach().cpu().numpy()
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
     losses /= len(data_loader)
@@ -71,6 +72,7 @@ def train_test_ch_est_model(
     model = get_model_from_config(configuration, reference_sequence)
     model_type = ModelType[configuration.model_type]
     model = model.to(device)
+    log.info(summary(model, (2, 242)))
     optimizer = torch.optim.Adam(
         model.parameters(), lr=configuration.mu, weight_decay=configuration.w_decay
     )
@@ -99,10 +101,15 @@ def main_loop(config_path):
     test_loader = DataLoader(
         test_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
     )
-    log.info("Start training...")
+    log.info(f"Start training model {config_name}...")
     ch_est_model, train_loss, test_loss = train_test_ch_est_model(
         train_loader, test_loader, config, wiphy_dataset.ref_seq
     )
+    log.info(f"Saving model - {config_name}")
+    output_filename = config_name.split('.')[0]
+    model_output_path = os.path.join(results_dir, f"{output_filename}.pt")
+    torch.save(ch_est_model.state_dict(), model_output_path)
+
     plot_loss_curves(
         config.training_iterations, train_loss, test_loss, config_name, writer
     )
@@ -110,6 +117,7 @@ def main_loop(config_path):
 
 if __name__ == "__main__":
     tb_log_dir = f"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/runs/{int(datetime.now().timestamp())}"
+    results_dir = rf"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results"
     writer = SummaryWriter(tb_log_dir, flush_secs=5)
     log = init_logger()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -120,11 +128,14 @@ if __name__ == "__main__":
     configs = [
         f
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
-        if not "older" in f and f.endswith(".json")
+        if "ds_C" in f and f.endswith(".json")
     ]
-    sub_size = int(10e3)
+    sub_size = int(100e3)
     test_percentage = 0.2
-    for config_path in configs[3:]:
-        config_name = os.path.split(config_path)[-1].replace(".json", "")
-        main_loop(config_path)
+    for config_path in configs:
+        try:
+            config_name = os.path.split(config_path)[-1].replace(".json", "")
+            main_loop(config_path)
+        except Exception as ex:
+            log.error(f"error: {config_name}\n{ex}")
     writer.close()

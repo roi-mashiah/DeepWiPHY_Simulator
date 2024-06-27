@@ -19,9 +19,11 @@ def get_layer_type(layer_name, values: dict):
     elif "bn" in layer_name:
         return torch.nn.BatchNorm1d(values["num_features"])
     elif "aFunc" in layer_name:
-        return torch.relu if values == "relu" else torch.tanh
+        return eval(f"torch.{values}")
     elif "pool" in layer_name:
         return torch.nn.MaxPool1d(values["kernel_size"], values["stride"])
+    elif "dropout" in layer_name:
+        return torch.nn.Dropout(values["p"])
     elif "cTrans" in layer_name:
         return torch.nn.ConvTranspose1d(
             values["input_channels"],
@@ -77,7 +79,7 @@ class DelaySpreadEstimationModel(nn.Module):
         for layer_name in self.node_counts.keys():
             layer = getattr(self, layer_name)
             x = layer(x)
-        return x
+        return x.view(-1)
 
 
 class ConvChannelEstimationModel(nn.Module):

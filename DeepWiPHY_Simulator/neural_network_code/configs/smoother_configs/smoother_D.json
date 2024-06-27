@@ -1,41 +1,38 @@
 {
   "manualSeed": 64,
-  "mu": 3e-4,
+  "mu": 1e-4,
   "batchSize": 64,
   "trainingIterations": 30,
   "nodeCounts": {
     "conv1": {
       "input_channels": 2,
-      "output_channels": 2,
-      "kernel_size": 10
+      "output_channels": 8,
+      "kernel_size": 5
     },
     "aFunc1": "relu",
     "conv2": {
-      "input_channels": 2,
-      "output_channels": 2,
-      "kernel_size": 10
+      "input_channels": 8,
+      "output_channels": 8,
+      "kernel_size": 5
     },
     "aFunc2": "relu",
     "fc1": {
-      "input_dim": 224,
-      "output_dim": 64
+      "input_dim": 234,
+      "output_dim": 128
     },
     "reshape1": {
-      "args": [
-        -1,
-        128
-      ]
+      "args": [-1, 256]
     },
     "bn1": {
-      "num_features": 128
+      "num_features": 256
     },
     "fc2": {
-      "input_dim": 128,
-      "output_dim": 13
+      "input_dim": 256,
+      "output_dim": 64
     },
     "aFunc3": "tanh"
   },
-  "lambda": 1e-4,
+  "lambda": 1e-6,
   "modelType": "smootherEst",
   "groupSize": 242,
   "testPerc": 0.2,

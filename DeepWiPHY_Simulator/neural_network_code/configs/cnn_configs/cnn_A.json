@@ -2,7 +2,7 @@
   "manualSeed": 64,
   "mu": 3e-4,
   "batchSize": 64,
-  "trainingIterations": 40,
+  "trainingIterations": 50,
   "nodeCounts": {
     "conv1": {
       "input_channels": 2,

@@ -113,13 +113,13 @@ def calculate_ds_performance(gt_cir, he_ltf, rms_ds, baseline_channel_est, metad
     metadata_dict["packet"] = metadata_dict["packet"].numpy()
     for i in range(batch_size):
         curr_gt = gt_cir.numpy()[i, :]
-        curr_rms_ds_est = rms_ds.numpy()[i, :]
+        curr_rms_ds_est = rms_ds.numpy()[i]
         curr_bl = baseline_channel_est.numpy()[i, :]
         gt_abs = calculate_absolute_value(curr_gt)
         baseline_estimation_abs = calculate_absolute_value(curr_bl)
         # use rms ds estimation to decide smoother
-        estimation_abs = smoothing_filter(he_ltf, curr_rms_ds_est)
-        metadata_dict["nn_loss"][i] = calculate_mse(gt_abs, estimation_abs)
+        # estimation_abs = smoothing_filter(he_ltf, curr_rms_ds_est, metadata_dict["snr"][i])
+        metadata_dict["nn_loss"][i] = calculate_mse(gt_abs, baseline_estimation_abs)
         metadata_dict["bl_loss"][i] = calculate_mse(gt_abs, baseline_estimation_abs)
     return metadata_dict
 
@@ -130,4 +130,4 @@ def smoothing_filter(he_ltf, rms_ds, snr):
     m_range = torch.arange(-(m - 1) / 2, (m - 1) / 2)
     sigma_squared = 1 / (10 ** (snr / 20))  # noise power assuming signal power is normalized
     r_hh = torch.sinc(m_range * delta_f * rms_ds)
-
+    return None

@@ -49,7 +49,7 @@
       "stride": 2,
       "padding": 1
     },
-    "aFunc6": "relu",
+    "aFunc6": "tanh",
     "cTrans4": {
       "input_channels": 2,
       "output_channels": 2,
