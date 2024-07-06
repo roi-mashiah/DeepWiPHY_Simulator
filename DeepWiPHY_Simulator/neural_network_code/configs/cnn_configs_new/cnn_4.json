@@ -1,0 +1,72 @@
+{
+  "manualSeed": 6660,
+  "mu": 0.1,
+  "batchSize": 128,
+  "trainingIterations": 80,
+  "nodeCounts": {
+    "conv1": {
+      "input_channels": 2,
+      "output_channels": 32,
+      "kernel_size": 7
+    },
+    "aFunc1": "relu",
+    "pool1": {
+      "kernel_size": 3,
+      "stride": 2
+    },
+    "conv2": {
+      "input_channels": 32,
+      "output_channels": 64,
+      "kernel_size": 5
+    },
+    "aFunc2": "relu",
+    "pool2": {
+      "kernel_size": 2,
+      "stride": 2
+    },
+    "conv3": {
+      "input_channels": 64,
+      "output_channels": 16,
+      "kernel_size": 5
+    },
+    "pool3": {
+      "kernel_size": 3,
+      "stride": 2
+    },
+    "view1": {
+      "args": [
+        -1,
+        400
+      ]
+    },
+    "fc1": {
+      "input_dim": 400,
+      "output_dim": 512
+    },
+    "bn1": {
+      "num_features": 512
+    },
+    "aFunc3": "tanh",
+    "dropout1": {
+      "p": 0.3
+    },
+    "fc2": {
+      "input_dim": 512,
+      "output_dim": 484
+    },
+    "view2": {
+      "args": [
+        -1,
+        2,
+        242
+      ]
+    }
+  },
+  "lambda": 7e-6,
+  "modelType": "channelConvNetEst",
+  "groupSize": 242,
+  "testPerc": 0.2,
+  "dataPath": "/home/tauproj3/data/deepWiPhyData/jsonfiles",
+  "chType": null,
+  "snrValue": null
+}
