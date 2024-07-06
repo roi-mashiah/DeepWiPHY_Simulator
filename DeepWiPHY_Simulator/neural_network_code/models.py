@@ -1,42 +1,90 @@
 import torch.nn as nn
 from torch import relu
-from torch.nn.functional import conv1d
+from torch.nn.functional import conv1d, log_softmax
 import torch
 from torch.fft import fftshift
+from enum import Enum
+from configuration import Configuration
 
 
-def get_layer_type(layer_name, values: dict):
-    if "conv" in layer_name:
-        return torch.nn.Conv1d(
-            values["input_channels"],
-            values["output_channels"],
-            values["kernel_size"],
-            stride=values.get("stride", 1),
-            padding=values.get("padding", 0)
-        )
-    elif "fc" in layer_name:
-        return torch.nn.Linear(values["input_dim"], values["output_dim"])
-    elif "bn" in layer_name:
-        return torch.nn.BatchNorm1d(values["num_features"])
-    elif "aFunc" in layer_name:
-        return eval(f"torch.{values}")
-    elif "pool" in layer_name:
-        return torch.nn.MaxPool1d(values["kernel_size"], values["stride"])
-    elif "dropout" in layer_name:
-        return torch.nn.Dropout(values["p"])
-    elif "cTrans" in layer_name:
-        return torch.nn.ConvTranspose1d(
-            values["input_channels"],
-            values["output_channels"],
-            values["kernel_size"],
-            values["stride"],
-            values.get("padding", 0),
-            values.get("output_padding", 0)
-        )
-    elif "view" in layer_name:
-        return lambda x: x.view(*values["args"])
-    elif "reshape" in layer_name:
-        return lambda x: x.reshape(*values["args"])
+class ModelType(Enum):
+    delaySpreadEst = 1
+    autoEncoder = 2
+    smootherEst = 3
+    channelConvNetEst = 4
+    channelClassifier = 5
+
+
+class ModelUtils:
+    @staticmethod
+    def get_model_from_config(configuration: Configuration, reference_seq):
+        model = ModelType[configuration.model_type]
+        criterion = nn.MSELoss()
+        nll_criterion = nn.NLLLoss()
+        nn_architecture = configuration.node_counts
+        if model == ModelType.autoEncoder:
+            return AutoEncoderModel(criterion, nn_architecture)
+        elif model == ModelType.channelConvNetEst:
+            return ConvChannelEstimationModel(criterion, nn_architecture)
+        elif model == ModelType.delaySpreadEst:
+            return DelaySpreadEstimationModel(criterion, nn_architecture, reference_seq)
+        elif model == ModelType.smootherEst:
+            return SmootherEstimationModel(criterion, nn_architecture, reference_seq)
+        elif model == ModelType.channelClassifier:
+            return ChannelClassifierModel(nll_criterion, nn_architecture)
+        else:
+            raise TypeError(f"Unexpected model name - {configuration.model_type}, unknown")
+
+    @staticmethod
+    def get_layer_type(layer_name, values: dict):
+        if "conv" in layer_name:
+            return torch.nn.Conv1d(
+                values["input_channels"],
+                values["output_channels"],
+                values["kernel_size"],
+                stride=values.get("stride", 1),
+                padding=values.get("padding", 0)
+            )
+        elif "fc" in layer_name:
+            return torch.nn.Linear(values["input_dim"], values["output_dim"])
+        elif "bn" in layer_name:
+            return torch.nn.BatchNorm1d(values["num_features"])
+        elif "aFunc" in layer_name:
+            return eval(f"torch.{values}")
+        elif "pool" in layer_name:
+            return torch.nn.MaxPool1d(values["kernel_size"], values["stride"])
+        elif "dropout" in layer_name:
+            return torch.nn.Dropout(values["p"])
+        elif "cTrans" in layer_name:
+            return torch.nn.ConvTranspose1d(
+                values["input_channels"],
+                values["output_channels"],
+                values["kernel_size"],
+                values["stride"],
+                values.get("padding", 0),
+                values.get("output_padding", 0)
+            )
+        elif "view" in layer_name:
+            return lambda x: x.view(*values["args"])
+        elif "reshape" in layer_name:
+            return lambda x: x.reshape(*values["args"])
+
+
+class ChannelClassifierModel(nn.Module):
+    def __init__(self, criterion, node_counts):
+        super().__init__()
+        self.criterion = criterion
+        self.node_counts = node_counts
+        for layer_name, params in node_counts.items():
+            layer = ModelUtils.get_layer_type(layer_name, params)
+            setattr(self, layer_name, layer)
+        self.double()
+
+    def forward(self, x):
+        for layer_name in self.node_counts.keys():
+            layer = getattr(self, layer_name)
+            x = layer(x)
+        return log_softmax(x, dim=1)
 
 
 class ChannelEstimationModel(nn.Module):
@@ -71,7 +119,7 @@ class DelaySpreadEstimationModel(nn.Module):
         self.criterion = criterion
         self.node_counts = node_counts
         for layer_name, params in node_counts.items():
-            layer = get_layer_type(layer_name, params)
+            layer = ModelUtils.get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
         self.double()
 
@@ -88,7 +136,7 @@ class ConvChannelEstimationModel(nn.Module):
         self.criterion = criterion
         self.node_counts = node_counts
         for layer_name, params in node_counts.items():
-            layer = get_layer_type(layer_name, params)
+            layer = ModelUtils.get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
         self.double()
 
@@ -106,7 +154,7 @@ class AutoEncoderModel(nn.Module):
         self.node_counts = node_counts
         self.scale_factor = nn.Parameter(torch.tensor(1.0))
         for layer_name, params in node_counts.items():
-            layer = get_layer_type(layer_name, params)
+            layer = ModelUtils.get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
         self.double()
 
@@ -125,7 +173,7 @@ class SmootherEstimationModel(nn.Module):
         self.sequence = ref_sequence
         self.scale_factor = nn.Parameter(torch.tensor(10.0))
         for layer_name, params in node_counts.items():
-            layer = get_layer_type(layer_name, params)
+            layer = ModelUtils.get_layer_type(layer_name, params)
             setattr(self, layer_name, layer)
         self.double()
 

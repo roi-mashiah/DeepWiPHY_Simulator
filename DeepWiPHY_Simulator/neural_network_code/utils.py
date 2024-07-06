@@ -6,15 +6,21 @@ import torch
 from torch.utils.data import Subset
 from sklearn.preprocessing import StandardScaler
 import numpy as np
-from enum import Enum
-from models import ConvChannelEstimationModel, AutoEncoderModel, SmootherEstimationModel, DelaySpreadEstimationModel
 
 
-class ModelType(Enum):
-    delaySpreadEst = 1
-    autoEncoder = 2
-    smootherEst = 3
-    channelConvNetEst = 4
+class EarlyStopping:
+    def __init__(self, tolerance=5, min_delta=50):
+
+        self.tolerance = tolerance
+        self.min_delta = min_delta
+        self.counter = 0
+        self.early_stop = False
+
+    def __call__(self, train_loss, validation_loss):
+        if 100 * (validation_loss - train_loss) / validation_loss > self.min_delta:
+            self.counter += 1
+            if self.counter >= self.tolerance:
+                self.early_stop = True
 
 
 def create_train_test_subsets(full_dataset, subset_size, test_perc):
@@ -27,22 +33,6 @@ def create_train_test_subsets(full_dataset, subset_size, test_perc):
     return train_wiphy_datasubset, test_wiphy_datasubset
 
 
-def get_model_from_config(configuration: Configuration, reference_seq):
-    model = ModelType[configuration.model_type]
-    criterion = torch.nn.MSELoss()
-    nn_architecture = configuration.node_counts
-    if model == ModelType.autoEncoder:
-        return AutoEncoderModel(criterion, nn_architecture)
-    elif model == ModelType.channelConvNetEst:
-        return ConvChannelEstimationModel(criterion, nn_architecture)
-    elif model == ModelType.delaySpreadEst:
-        return DelaySpreadEstimationModel(criterion, nn_architecture, reference_seq)
-    elif model == ModelType.smootherEst:
-        return SmootherEstimationModel(criterion, nn_architecture, reference_seq)
-    else:
-        raise TypeError(f"Unexpected model name - {configuration.model_type}, unknown")
-
-
 def scale_vector(v):
     # created scaler
     scaler = StandardScaler()
@@ -50,11 +40,6 @@ def scale_vector(v):
     scaler.fit(v)
     # transform training dataset
     return scaler.transform(v), scaler
-
-
-def rmse(output, target):
-    loss = torch.mean((output - target) ** 2) / (torch.linalg.norm(target) ** 2)
-    return loss
 
 
 def load_config(p: str, log) -> Configuration:
@@ -76,6 +61,12 @@ def init_logger():
     formatter = colorlog.ColoredFormatter("%(log_color)s%(levelname)s: %(message)s")
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+    # Create file handler
+    file_handler = logging.FileHandler('app.log')
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
     return logger
 
 

@@ -1,8 +1,11 @@
+import os
+
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from torch import FloatTensor
 from os import path
+from decimal import Decimal
+from utils import *
 
 
 def plot_loss_curves(epochs, train_losses, test_losses, title_str, writer):
@@ -77,15 +80,15 @@ def plot_performance_all(results_df):
             plt.subplot(2, 3, i + 1, title=f"Channel {channel}")
             for config_name, config_df in ch_sub_df.groupby("config_name"):
                 nn_ccdf = get_ccdf(
-                (config_df.nn_loss / config_df.bl_loss).values.reshape(
-                    config_df.shape[0], 1
+                    (config_df.nn_loss / config_df.bl_loss).values.reshape(
+                        config_df.shape[0], 1
+                    )
                 )
-            )
                 change_index = np.argwhere(nn_ccdf["x"] > 0)[0]
                 losing_probability = nn_ccdf["ccdf"][change_index]
                 free_text = f"{config_name}\nN={config_df.shape[0]}\nPr(BL<NN)={round(losing_probability[0], 3)}"
                 plt.semilogy(nn_ccdf["x"], nn_ccdf["ccdf"], label=free_text)
-                    # plt.ylim([10e-4, 1])
+                plt.ylim([10e-4, 1])
             plt.grid()
             plt.legend()
             i += 1
@@ -93,43 +96,42 @@ def plot_performance_all(results_df):
         f.savefig(f"all_results_snr_{int(snr)}.png")
     plt.show()
 
+
 def plot_channel_reconstruction(
-        gt: FloatTensor, estimation: FloatTensor, baseline_channel_est, metadata, writer
+        gt: FloatTensor, estimation: FloatTensor, baseline_channel_est, metadata, writer, config_name
 ):
-    for i in range(np.shape(gt.numpy())[0]):
+    for i in range(min(np.shape(gt.numpy())[0], 11)):
         curr_gt = gt.numpy()[i, :]
         curr_est = estimation.numpy()[i, :]
         curr_bl = baseline_channel_est.numpy()[i, :]
-        gt_abs = np.sqrt(
-            np.sum(np.power(curr_gt.reshape([2, curr_est.shape[0] // 2]), 2), 0)
-        )
-        estimation_abs = np.sqrt(
-            np.sum(np.power(curr_est.reshape([2, curr_gt.shape[0] // 2]), 2), 0)
-        )
-        baseline_estimation_abs = np.sqrt(
-            np.sum(np.power(curr_bl.reshape([2, curr_bl.shape[0] // 2]), 2), 0)
-        )
-        mse = np.round(np.mean((gt_abs - estimation_abs) ** 2), 2)
-        bl_mse = np.round(np.mean((gt_abs - baseline_estimation_abs) ** 2), 2)
-        # f = plt.figure(i)
-        # plt.stem(gt_abs, linefmt='g', markerfmt='go', label='truth')
-        # plt.stem(estimation_abs, linefmt='r', markerfmt='rd', label='estimation')
-        # plt.stem(baseline_estimation_abs, linefmt='m', markerfmt='mv', label='classic method')
-        # plt.grid()
-        # plt.legend()
-        # plt.title(f"{metadata[i]} MSE(NN,BL): {mse},{bl_mse}")
-        # writer.add_figure("Perf Plots", figure=f, global_step=i, close=True)
-        writer.add_scalars(
-            "Performance - Classic VS NN", {"NeuralNet": mse, "Classic": bl_mse}, i
-        )
+        gt_abs = calculate_absolute_value(curr_gt)
+        estimation_abs = calculate_absolute_value(curr_est)
+        baseline_estimation_abs = calculate_absolute_value(curr_bl)
+        nn_mse = np.mean(np.power(estimation_abs - gt_abs, 2))
+        bl_mse = np.mean(np.power(baseline_estimation_abs - gt_abs, 2))
+        f, (ax1, ax2) = plt.subplots(2, 1)
+        ax1.plot(gt_abs, '*-', label='truth')
+        ax1.plot(estimation_abs, '.--', label='neural net')
+        ax1.set_ylim(0, 1.5)
+        ax1.grid()
+        ax1.legend()
+        ax2.plot(gt_abs, '*-', label='truth')
+        ax2.plot(baseline_estimation_abs, '.--', label='classic method')
+        ax2.set_ylim(0, 1.5)
+        ax2.grid()
+        ax2.legend()
+        title_str = f"{config_name} Channel: {metadata['ch'][i]}, SNR: {metadata['snr'][i]}"
+        f.suptitle("%s MSE(NN,BL): %.2E,%.2E" % (title_str, Decimal(nn_mse), Decimal(bl_mse)))
+        writer.add_figure("Perf Plots - {}".format(config_name), figure=f, global_step=i, close=True)
+        plt.close(f)
         writer.flush()
     return
 
 
 if __name__ == "__main__":
     base_results_dir = "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results"
-    best_results = ["auto_enc_C", "cnn_C","smoother_E"]
     postfix = "_results.csv"
+    best_results = [f.replace(postfix,"") for f in os.listdir(base_results_dir) if "channel_est" in f and postfix in f]
     dfs = []
     for res_name in best_results:
         res_path = path.join(base_results_dir, res_name + postfix)

@@ -128,7 +128,7 @@ if __name__ == "__main__":
     configs = [
         f
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
-        if "ds_C" in f and f.endswith(".json")
+        if "cnn" in f and f.endswith(".json")
     ]
     sub_size = int(100e3)
     test_percentage = 0.2
