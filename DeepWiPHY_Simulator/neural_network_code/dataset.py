@@ -2,12 +2,21 @@ import json
 import os
 import re
 import numpy as np
-from numpy.fft import fftshift
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from configuration import Configuration
-from utils import ModelType
+from models import ModelType
+from enum import Enum
+
+
+class ChannelType(Enum):
+    A = 0
+    B = 1
+    C = 2
+    D = 3
+    E = 4
+    F = 5
 
 
 class WiPhyDataset(Dataset):
@@ -43,7 +52,7 @@ class WiPhyDataset(Dataset):
         return len(self.packets)
 
     def __getitem__(self, idx):
-        idx = idx.detach().numpy()
+        idx = idx.detach().numpy() if type(idx) is not int else idx
         packet_path = self.packets.loc[idx, "path"]
         packet_info = self.packets.loc[idx, ["snr", "ch", "packet"]].to_dict()
         with open(packet_path, "r") as file_reader:
@@ -51,8 +60,8 @@ class WiPhyDataset(Dataset):
 
         packet["group"] = (np.arange(242) // self.configuration.group_size) + 1
         group_mask = packet["group"] == 1
-        packet["channel_est_real"] = fftshift(packet["channel_est_real"])
-        packet["channel_est_imag"] = fftshift(packet["channel_est_imag"])
+        packet["channel_est_real"] = packet["channel_est_real"]
+        packet["channel_est_imag"] = packet["channel_est_imag"]
         he_ltf = torch.from_numpy(
             np.vstack(
                 (
@@ -88,6 +97,9 @@ class WiPhyDataset(Dataset):
         elif self.model_type == ModelType.autoEncoder:
             # input to the NN is the least squares estimation
             return channel_est, channel, channel_est, packet_info
+        elif self.model_type == ModelType.channelClassifier:
+            # input is the LTF, target is the channel class
+            return he_ltf.double(), ChannelType[packet_info['ch']].value, channel_est, packet_info
         else:
             return he_ltf, channel, channel_est, packet_info
 
