@@ -14,7 +14,7 @@ end
 save_scenario = 1;
 maxNumPackets = 10000;
 maxNumErrors = 0.5*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 12:4:40;
+snr = 12;%12:4:40;
 %snr=[30:35];
 % snr = 12:2:20;
 numSNR = numel(snr); % Number of SNR points
@@ -22,7 +22,7 @@ packetErrorRate = zeros(1,numSNR);
 plot_ch = 0; plot_symb = 0; plot_perf=0;
 output_data_dir = "/home/tauproj3/data/deepWiPhyData/matfiles";
 
-for sc_ind = 1:numel(scenarios)
+for sc_ind = 2:2%1:numel(scenarios)
     scenario = scenarios{sc_ind};
     cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
@@ -63,13 +63,11 @@ for sc_ind = 1:numel(scenarios)
             % Pass through a fading indoor TGax channel
             reset(tgaxChannel); % Reset channel for different realization
             rx = tgaxChannel(txPad);
+            clean_rx = tgaxChannel(txPad);
 
-            % Get GT Channel Estimation
             x = zeros(256,1);
             x(1) = 1;
             y = tgaxChannel(x);
-            scenario.gt.channel_taps_gt{numPkt} = y;
-            scenario.gt.rms_delay_spread{numPkt} = calculate_rms_delay_spread(Ts, y);
 
             % Pass the waveform through AWGN channel
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
@@ -86,6 +84,7 @@ for sc_ind = 1:numel(scenarios)
             lstf = rx(coarsePktOffset+(ind.LSTF(1):ind.LSTF(2)),:);
             coarseFreqOff = wlanCoarseCFOEstimate(lstf,chanBW);
             rx = frequencyOffset(rx,fs,-coarseFreqOff); % Matlab 2022A complient
+            clean_rx = frequencyOffset(clean_rx,fs,-coarseFreqOff);
 
             % Extract the non-HT fields and determine fine packet offset
             nonhtfields = rx(coarsePktOffset+(ind.LSTF(1):ind.LSIG(2)),:);
@@ -106,11 +105,19 @@ for sc_ind = 1:numel(scenarios)
             rxLLTF = rx(pktOffset+(ind.LLTF(1):ind.LLTF(2)),:);
             fineFreqOff = wlanFineCFOEstimate(rxLLTF,chanBW);
             rx = frequencyOffset(rx,fs,-fineFreqOff);
+            clean_rx = frequencyOffset(clean_rx,fs,-fineFreqOff);
 
             % HE-LTF demodulation and channel estimation
             rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
             heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
+
+            % Get GT Channel Estimation
+            myltfDemod = wlanHEDemodulate(clean_rx(pktOffset+(ind.HELTF(1):ind.HELTF(2))),'HE-LTF',cfgHE);
+            [gtChanEst,myPilots] = wlanHELTFChannelEstimate(myltfDemod,cfgHE);
+            
+            scenario.gt.channel_taps_gt{numPkt} = gtChanEst;
+            scenario.gt.rms_delay_spread{numPkt} = calculate_rms_delay_spread(Ts, y);
 
             % log HE-LTF data for training, channel estimation for
             % reference and comparisons
