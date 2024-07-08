@@ -66,7 +66,7 @@ for sc_ind = 1:numel(scenarios)
 
             % get the GT channel
             clean_rx = rx;
-            [gtChanEst, gtPilotEst] = get_gt_channel(clean_rx, chanBW, fs, cfgHE);
+            [gtChanEst, gtPilotEst] = get_gt_channel(clean_rx, chanBW, fs,ind, cfgHE);
             scenario.gt.channel_taps_gt{numPkt} = gtChanEst;
             scenario.gt.rms_delay_spread{numPkt} = 0; % not needed 
 
