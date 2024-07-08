@@ -27,7 +27,7 @@ class ModelUtils:
         elif model == ModelType.channelConvNetEst:
             return ConvChannelEstimationModel(criterion, nn_architecture)
         elif model == ModelType.delaySpreadEst:
-            return DelaySpreadEstimationModel(criterion, nn_architecture, reference_seq)
+            return DelaySpreadEstimationModel(criterion, nn_architecture)
         elif model == ModelType.smootherEst:
             return SmootherEstimationModel(criterion, nn_architecture, reference_seq)
         elif model == ModelType.channelClassifier:
@@ -113,9 +113,8 @@ class ChannelEstimationModel(nn.Module):
 
 
 class DelaySpreadEstimationModel(nn.Module):
-    def __init__(self, criterion, node_counts, ref_sequence):
+    def __init__(self, criterion, node_counts):
         super().__init__()
-        self.reference_sequence = ref_sequence
         self.criterion = criterion
         self.node_counts = node_counts
         for layer_name, params in node_counts.items():

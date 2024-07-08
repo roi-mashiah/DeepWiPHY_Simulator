@@ -21,20 +21,20 @@ estimators = {channel_estimator_a,...
               channel_estimator_d,...
               channel_estimator_e,...
               channel_estimator_f};
+nnMode = 0; % 0 - smoother, 1 - clsfr -> est
+dsLookup = [0    15    30    50   100   150];
 %% global configs and preallocs
 save_scenario = 0;
-maxNumPackets = 1000;
-maxNumErrors = 0.8*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 50:2:60;
-%snr=[30:35];
-% snr = 12:2:20;
+maxNumPackets = 500;
+maxNumErrors = 0.1*maxNumPackets;   % The maximum number of packet errors at an SNR point
+snr = 10:5:30;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
 packetErrorRateNN = zeros(1,numSNR);
 plot_ch = 0; plot_symb = 0; plot_perf=1;
 output_data_dir = "/home/tauproj3/data/deepWiPhyData/matfiles";
 
-for sc_ind = 2:2%1:numel(scenarios)
+for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};
     cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
@@ -49,8 +49,20 @@ for sc_ind = 2:2%1:numel(scenarios)
     % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
     ind = wlanFieldIndices(cfgHE);
     seed = scenario.seed;
-    
-    for isnr = 1:numSNR
+    fftLength = ofdmInfo.FFTLength;
+    numTones = ofdmInfo.NumTones;
+    lstf_ind = ind.LSTF(1):ind.LSTF(2);
+    nonht_ind = ind.LSTF(1):ind.LSIG(2);
+    lltf_ind = ind.LLTF(1):ind.LLTF(2);
+    heltf_ind = ind.HELTF(1):ind.HELTF(2);
+    hedata_ind = ind.HEData(1):ind.HEData(2);
+    pilot_ind = ofdmInfo.PilotIndices;
+    data_ind = ofdmInfo.DataIndices;
+
+    delete(gcp("nocreate"))
+    parpool('local',4);
+
+    parfor isnr = 1:numSNR
         % Set random substream index per iteration to ensure that each
         % iteration uses a repeatable set of random numbers
         stream = RandStream('combRecursive','Seed',seed);
@@ -59,8 +71,8 @@ for sc_ind = 2:2%1:numel(scenarios)
 
         % Account for noise energy in nulls so the SNR is defined per
         % active subcarrier
-        packetSNR = snr(isnr)-10*log10(ofdmInfo.FFTLength/ofdmInfo.NumTones);
-        % scenario.gt.realSnr = packetSNR;
+        packetSNR = snr(isnr)-10*log10(fftLength/numTones);
+
         % Loop to simulate multiple packets
         numPacketErrors = 0;
         numPacketErrorsNN = 0;
@@ -78,18 +90,9 @@ for sc_ind = 2:2%1:numel(scenarios)
             reset(tgaxChannel); % Reset channel for different realization
             rx = tgaxChannel(txPad);
 
-            % Get GT Channel Estimation
-            x = zeros(size(rx));
-            x(1) = 1;
-            y = tgaxChannel(x);
-            % scenario.gt.channel_taps_gt{numPkt} = y;
-            % scenario.gt.rms_delay_spread{numPkt} = calculate_rms_delay_spread(Ts, y);
-
             % Pass the waveform through AWGN channel
-            rng(seed)
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
-            y_noisy = awgn(y,50);
-
+           
             % Packet detect and determine coarse packet offset
             coarsePktOffset = wlanPacketDetect(rx,chanBW);
             if isempty(coarsePktOffset) % If empty, no L-STF detected; packet error
@@ -99,12 +102,12 @@ for sc_ind = 2:2%1:numel(scenarios)
             end
 
             % Extract L-STF and perform coarse frequency offset correction
-            lstf = rx(coarsePktOffset+(ind.LSTF(1):ind.LSTF(2)),:);
+            lstf = rx(coarsePktOffset+(lstf_ind),:);
             coarseFreqOff = wlanCoarseCFOEstimate(lstf,chanBW);
             rx = frequencyOffset(rx,fs,-coarseFreqOff); % Matlab 2022A complient
 
             % Extract the non-HT fields and determine fine packet offset
-            nonhtfields = rx(coarsePktOffset+(ind.LSTF(1):ind.LSIG(2)),:);
+            nonhtfields = rx(coarsePktOffset+(nonht_ind),:);
             finePktOffset = wlanSymbolTimingEstimate(nonhtfields,chanBW);
 
             % Determine final packet offset
@@ -119,82 +122,75 @@ for sc_ind = 2:2%1:numel(scenarios)
             end
 
             % Extract L-LTF and perform fine frequency offset correction
-            rxLLTF = rx(pktOffset+(ind.LLTF(1):ind.LLTF(2)),:);
+            rxLLTF = rx(pktOffset+(lltf_ind),:);
             fineFreqOff = wlanFineCFOEstimate(rxLLTF,chanBW);
             rx = frequencyOffset(rx,fs,-fineFreqOff);
 
             % HE-LTF demodulation and channel estimation
-            rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
+            rxHELTF = rx(pktOffset+(heltf_ind),:); % time sig
             heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
 
             % predict channel using neural networks
             nnInput = [real(heltfDemod)' ; imag(heltfDemod)'];
-            [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
-            chanEstNN = squeeze(predict(estimators{channelTypePrediction},nnInput));
-            cmplxChEstNN = double(chanEstNN(1,:) - 1j*chanEstNN(2,:))';
+            chanEstNNBased = zeros(size(chanEst));
 
-            % log HE-LTF data for training, channel estimation for
-            % reference and comparisons
-            % scenario.rx.HE_LTF{numPkt} = heltfDemod;
-            % scenario.rx.channel_est{numPkt} = chanEst;
-            rms_ds = calculate_rms_delay_spread(Ts, y);
-            smoother = ds_smoother(heltfDemod,packetSNR,rms_ds);
-            chanEst_padded = [zeros(4,1); chanEst; zeros(4,1)];
-            chanEst_padded(1:4)=chanEst(1);
-            chanEst_padded(end-4:end)=chanEst(end);
-            clean_est = filter(smoother,1,chanEst_padded);
-            clean_est = clean_est(5:end-4);
-            % cmplxChEstNN = clean_est;
+            switch nnMode
+                case 0
+                    [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
+                    smoother = ds_smoother(heltfDemod,packetSNR,dsLookup(channelTypePrediction));
+                    % ZOH for edge effects
+                    chanEst_padded = [zeros(4,1); chanEst; zeros(4,1)];
+                    chanEst_padded(1:4)=chanEst(1);
+                    chanEst_padded(end-4:end)=chanEst(end);
+                    clean_est = filter(smoother,1,chanEst_padded);
+                    chanEstNNBased = clean_est(5:end-4);
+                case 1
+                    [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
+                    chanEstNN = squeeze(predict(estimators{channelTypePrediction},nnInput));
+                    chanEstNNBased = double(chanEstNN(1,:) - 1j*chanEstNN(2,:))';
+            end
+           
             % Data demodulate - # symbols = # samples / (fftSize + CPSize)
-            rxData = rx(pktOffset+(ind.HEData(1):ind.HEData(2)),:);
+            rxData = rx(pktOffset+(hedata_ind),:);
             demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);
-
+%% NN based demodulation and equalization
             % Pilot phase tracking NN
-            demodSymNN = wlanHETrackPilotError(demodSym,cmplxChEstNN,cfgHE,'HE-Data');
-            
-            % Pilot phase tracking
-            demodSym = wlanHETrackPilotError(demodSym,chanEst,cfgHE,'HE-Data');
-            
+            demodSymNN = wlanHETrackPilotError(demodSym,chanEstNNBased,cfgHE,'HE-Data');
 
             % Estimate noise power in HE fields NN
-            nVarEstNN = heNoiseEstimate(demodSymNN(ofdmInfo.PilotIndices,:,:),cmplxChEstNN(ofdmInfo.PilotIndices),cfgHE);
-
-            % Estimate noise power in HE fields
-            nVarEst = heNoiseEstimate(demodSym(ofdmInfo.PilotIndices,:,:),pilotEst,cfgHE);
+            nVarEstNN = heNoiseEstimate(demodSymNN(pilot_ind,:,:),chanEstNNBased(pilot_ind),cfgHE);
 
             % Extract data subcarriers from demodulated symbols and channel
             % estimate NN
-            demodDataSymNN = demodSymNN(ofdmInfo.DataIndices,:,:);
-            chanEstDataNN = cmplxChEstNN(ofdmInfo.DataIndices,:,:);
-
-            % Extract data subcarriers from demodulated symbols and channel
-            % estimate
-            demodDataSym = demodSym(ofdmInfo.DataIndices,:,:);
-            chanEstData = chanEst(ofdmInfo.DataIndices,:,:);
-
-
+            demodDataSymNN = demodSymNN(data_ind,:,:);
+            chanEstDataNN = chanEstNNBased(data_ind,:,:);
+            
             % Equalization and STBC combining NN
             [eqDataSymNN,csiNN] = heEqualizeCombine(demodDataSymNN,chanEstDataNN,nVarEstNN,cfgHE);
+            
+            % Recover data NN
+            rxPSDUNN = wlanHEDataBitRecover(eqDataSymNN,nVarEstNN,csiNN,cfgHE,'LDPCDecodingMethod','norm-min-sum');
+
+%% Original demodulation and equalization            
+            % Pilot phase tracking
+            demodSym = wlanHETrackPilotError(demodSym,chanEst,cfgHE,'HE-Data');            
+           
+            % Estimate noise power in HE fields
+            nVarEst = heNoiseEstimate(demodSym(pilot_ind,:,:),pilotEst,cfgHE);
+            
+            % Extract data subcarriers from demodulated symbols and channel
+            % estimate
+            demodDataSym = demodSym(data_ind,:,:);
+            chanEstData = chanEst(data_ind,:,:);
 
             % Equalization and STBC combining
             [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);
 
-            % log symbols to calculate SER
-            % scenario.rx.data_symbols{numPkt} = eqDataSym;
-
-            if plot_symb
-                ref = scenario.gt{numPkt};
-                plot_symb_ref(ref,eqDataSym)
-            end
-
-            % Recover data NN
-            rxPSDUNN = wlanHEDataBitRecover(eqDataSymNN,nVarEstNN,csiNN,cfgHE,'LDPCDecodingMethod','norm-min-sum');
-
             % Recover data
             rxPSDU = wlanHEDataBitRecover(eqDataSym,nVarEst,csi,cfgHE,'LDPCDecodingMethod','norm-min-sum');
 
-
+%% performance
             % Determine if any bits are in error, i.e. a packet error NN
             packetErrorNN = ~isequal(txPSDU,rxPSDUNN);
             % Determine if any bits are in error, i.e. a packet error
@@ -208,43 +204,22 @@ for sc_ind = 2:2%1:numel(scenarios)
             end
             numPkt = numPkt+1;
         end
-        if save_scenario
-            filename = strcat("sc_",num2str(convertTo(datetime,'epochtime')),"_snr_",num2str(snr(isnr)),"_ch_",tgaxChannel.DelayProfile(end),".mat");
-            if ~exist(output_data_dir,"dir")
-                mkdir(output_data_dir)
-            end
-            save(fullfile(output_data_dir,filename),"scenario");
-        end
-        if plot_ch
-            plot_channel(scenario)
-        end
 
         % Calculate packet error rate (PER) at SNR point
         packetErrorRate(isnr) = numPacketErrors/(numPkt-1);
         disp(['MCS ' num2str(cfgHE.MCS) ','...
             ' SNR ' num2str(snr(isnr)) ...
             ' completed after ' num2str(numPkt-1) ' packets,'...
-            ' PER:' num2str(packetErrorRate(isnr))]);
-        % Calculate packet error rate (PER) at SNR point
+            ' BL PER:' num2str(packetErrorRate(isnr))]);
+        % Calculate packet error rate (PER) at SNR point NN
         packetErrorRateNN(isnr) = numPacketErrorsNN/(numPkt-1);
         disp(['MCS ' num2str(cfgHE.MCS) ','...
             ' SNR ' num2str(snr(isnr)) ...
             ' completed after ' num2str(numPkt-1) ' packets,'...
-            ' PER:' num2str(packetErrorRateNN(isnr))]);
+            ' NN PER:' num2str(packetErrorRateNN(isnr))]);
     end
 
     if plot_perf
         plot_performance(snr,packetErrorRate,packetErrorRateNN,scenario)
     end
-end
-
-%%
-calculate_rms_delay_spread(Ts,y)
-function rms_ds = calculate_rms_delay_spread(Ts, cir)
-% rms delay spread calculation
-timeline = (0:(length(cir)-1)).*Ts;
-pdp = (abs(cir).^2)./(timeline(end)); % |h(t)|^2 / T
-avg_ds = (pdp'*timeline')/sum(pdp);
-normalized_t = (timeline - avg_ds).^2;
-rms_ds = sqrt((pdp'*normalized_t')/sum(pdp));
 end
