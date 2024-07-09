@@ -84,8 +84,13 @@ def plot_performance_all(results_df):
                         config_df.shape[0], 1
                     )
                 )
-                change_index = np.argwhere(nn_ccdf["x"] > 0)[0]
-                losing_probability = nn_ccdf["ccdf"][change_index]
+                change_index = np.argwhere(nn_ccdf["x"] > 0)
+                if len(change_index) == 0:
+                    # we always win
+                    losing_probability = [0]
+                else:
+                    change_index = change_index[0]
+                    losing_probability = nn_ccdf["ccdf"][change_index]
                 free_text = f"{config_name}\nN={config_df.shape[0]}\nPr(BL<NN)={round(losing_probability[0], 3)}"
                 plt.semilogy(nn_ccdf["x"], nn_ccdf["ccdf"], label=free_text)
                 plt.ylim([10e-4, 1])

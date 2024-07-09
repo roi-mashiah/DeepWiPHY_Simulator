@@ -14,12 +14,12 @@ for f=1:length(allResults)
     res = load(full_filename);
     ltf_samples = res.scenario.rx.HE_LTF;
     channel_vec = res.scenario.gt.channel_taps_gt;
-    rms_ds_vec = res.scenario.gt.rms_delay_spread;
+    % rms_ds_vec = res.scenario.gt.rms_delay_spread;
     channel_est_matlab = res.scenario.rx.channel_est;
     parfor i=1:length(res.scenario.rx.HE_LTF)
         heLtf = ltf_samples{i};
         channelTapsGt = channel_vec{i};
-        gt_rms_ds = rms_ds_vec{i};
+        % gt_rms_ds = rms_ds_vec{i};
         channelEstimation = channel_est_matlab{i};
         if ~isempty(heLtf)
             filename_json = replace(file_name_mat,".mat",strcat("_packet_",num2str(i),".json"));            
@@ -36,7 +36,7 @@ for f=1:length(allResults)
             for j = 1:numel(variable_names)
                 data_struct.(variable_names{j}) = data_to_save(:, j);
             end
-            data_struct.rms_ds = gt_rms_ds;
+            % data_struct.rms_ds = gt_rms_ds;
             
             json_str = jsonencode(data_struct);
             fid = fopen(outfilename,"w");

@@ -15,19 +15,19 @@ for f = 1:numel(model_paths)
     file_name = fullfile(model_paths(f).folder,model_paths(f).name);
     load(file_name)
 end
-estimators = {channel_estimator_a,... 
-              channel_estimator_b,...
-              channel_estimator_c,...
-              channel_estimator_d,...
-              channel_estimator_e,...
-              channel_estimator_f};
+estimators = {s.channel_est_A_1,... 
+              s.channel_est_B_1,...
+              s.channel_est_C_1,...
+              s.channel_est_D_1,...
+              s.channel_est_E_1,...
+              s.channel_est_F_1};
 nnMode = 0; % 0 - smoother, 1 - clsfr -> est
-dsLookup = [0    15    30    50   100   150];
+dsLookup = [0    15    30    50   100   150].*10e-9;
 %% global configs and preallocs
 save_scenario = 0;
 maxNumPackets = 500;
 maxNumErrors = 0.1*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 10:5:30;
+snr = 10:2:24;
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
 packetErrorRateNN = zeros(1,numSNR);
@@ -220,6 +220,6 @@ for sc_ind = 1:numel(scenarios)
     end
 
     if plot_perf
-        plot_performance(snr,packetErrorRate,packetErrorRateNN,scenario)
+        plot_performance(snr,packetErrorRate,packetErrorRateNN,nnMode,scenario)
     end
 end
