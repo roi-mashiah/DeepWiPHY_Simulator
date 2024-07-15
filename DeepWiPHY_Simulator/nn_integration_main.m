@@ -21,29 +21,37 @@ estimators = {s.channel_est_A_1,...
               s.channel_est_D_1,...
               s.channel_est_E_1,...
               s.channel_est_F_1};
-nnMode = 0; % 0 - smoother, 1 - clsfr -> est
-dsLookup = [0    15    30    50   100   150].*10e-9;
+
+dsLookup = [0    15    30    50   100   150].*1e-9;
 %% global configs and preallocs
 save_scenario = 0;
-maxNumPackets = 500;
-maxNumErrors = 0.1*maxNumPackets;   % The maximum number of packet errors at an SNR point
+maxNumPackets = 1000;
+maxNumErrors = 0.2*maxNumPackets;   % The maximum number of packet errors at an SNR point
 snr = 10:2:24;
 numSNR = numel(snr); % Number of SNR points
-packetErrorRate = zeros(1,numSNR);
-packetErrorRateNN = zeros(1,numSNR);
-plot_ch = 0; plot_symb = 0; plot_perf=1;
-output_data_dir = "/home/tauproj3/data/deepWiPhyData/matfiles";
+
+packetErrorRateBaseline = zeros(1,numSNR);
+packetErrorRateSmootherOrig = zeros(1,numSNR);
+packetErrorRateNn = zeros(1,numSNR);
+packetErrorRateNnSmoother = zeros(1,numSNR);
+packetErrorRateGenieClassifierNN = zeros(1,numSNR);
+packetErrorRateGenieSmoother = zeros(1,numSNR);
+packetErrorRateMeanSmoother = zeros(1,numSNR);
+
+confusionMatrix = zeros(numSNR,6,6);
+
+plot_perf=1;
+delete(gcp("nocreate"))
+parpool('local',8);
 
 for sc_ind = 1:numel(scenarios)
     scenario = scenarios{sc_ind};
     cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
-    chanBW = scenario.tx.HE_config.ChannelBandwidth;
-    scenario.tx.numPackets = maxNumPackets;
+    chanBW = scenario.tx.HE_config.ChannelBandwidth;    
 
     % Get occupied subcarrier indices and OFDM parameters
     ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
-    scenario.tx.ofdmInfo = ofdmInfo;
     fs = tgaxChannel.SampleRate;
     Ts = 1/fs;
     % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
@@ -59,9 +67,6 @@ for sc_ind = 1:numel(scenarios)
     pilot_ind = ofdmInfo.PilotIndices;
     data_ind = ofdmInfo.DataIndices;
 
-    delete(gcp("nocreate"))
-    parpool('local',4);
-
     parfor isnr = 1:numSNR
         % Set random substream index per iteration to ensure that each
         % iteration uses a repeatable set of random numbers
@@ -74,12 +79,22 @@ for sc_ind = 1:numel(scenarios)
         packetSNR = snr(isnr)-10*log10(fftLength/numTones);
 
         % Loop to simulate multiple packets
+        predictions = zeros(1,maxNumPackets);
+        
         numPacketErrors = 0;
         numPacketErrorsNN = 0;
+        numPacketErrorsSmoother = 0;        
+        numPacketErrorsSmootherOrig = 0;        
+        numPacketErrorsGenieClassifierNN = 0;
+        numPacketErrorsGenieSmoother = 0;
+        numPacketErrorsMeanSmoother = 0;
+
         numPkt = 1; % Index of packet transmitted
-        while numPacketErrors<=maxNumErrors && numPkt<=maxNumPackets
+        c = 1;
+        psduLength = getPSDULength(cfgHE); % PSDU length in bytes
+
+        while numPacketErrors<=maxNumErrors && numPkt<=maxNumPackets            
             % Generate a packet with random PSDU
-            psduLength = getPSDULength(cfgHE); % PSDU length in bytes
             txPSDU = randi([0 1],psduLength*8,1); % times 8 since we send bits (not bytes)
             tx = wlanWaveformGenerator(txPSDU,cfgHE); % IQ Data
 
@@ -89,137 +104,112 @@ for sc_ind = 1:numel(scenarios)
             % Pass through a fading indoor TGax channel
             reset(tgaxChannel); % Reset channel for different realization
             rx = tgaxChannel(txPad);
+            clean_rx = rx;
 
             % Pass the waveform through AWGN channel
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
-           
-            % Packet detect and determine coarse packet offset
-            coarsePktOffset = wlanPacketDetect(rx,chanBW);
-            if isempty(coarsePktOffset) % If empty, no L-STF detected; packet error
+                       
+            [heltfDemod,pktOffset] = get_he_ltf_demod(rx,chanBW,lstf_ind,fs,nonht_ind,lltf_ind,heltf_ind,cfgHE);
+
+            if isempty(heltfDemod)
+                % timing error (freq offset too large)
                 numPacketErrors = numPacketErrors+1;
                 numPkt = numPkt+1;
                 continue; % Go to next loop iteration
             end
 
-            % Extract L-STF and perform coarse frequency offset correction
-            lstf = rx(coarsePktOffset+(lstf_ind),:);
-            coarseFreqOff = wlanCoarseCFOEstimate(lstf,chanBW);
-            rx = frequencyOffset(rx,fs,-coarseFreqOff); % Matlab 2022A complient
-
-            % Extract the non-HT fields and determine fine packet offset
-            nonhtfields = rx(coarsePktOffset+(nonht_ind),:);
-            finePktOffset = wlanSymbolTimingEstimate(nonhtfields,chanBW);
-
-            % Determine final packet offset
-            pktOffset = coarsePktOffset+finePktOffset;
-
-            % If packet detected outwith the range of expected delays from
-            % the channel modeling; packet error
-            if pktOffset>50
-                numPacketErrors = numPacketErrors+1;
-                numPkt = numPkt+1;
-                continue; % Go to next loop iteration
-            end
-
-            % Extract L-LTF and perform fine frequency offset correction
-            rxLLTF = rx(pktOffset+(lltf_ind),:);
-            fineFreqOff = wlanFineCFOEstimate(rxLLTF,chanBW);
-            rx = frequencyOffset(rx,fs,-fineFreqOff);
-
-            % HE-LTF demodulation and channel estimation
-            rxHELTF = rx(pktOffset+(heltf_ind),:); % time sig
-            heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
-            [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
+            chanEstBaseline = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % no smoother
+            chanEstSmootherFixed = wlanHELTFChannelEstimate(heltfDemod,cfgHE, "FrequencySmoothingSpan",5); % all ones
 
             % predict channel using neural networks
             nnInput = [real(heltfDemod)' ; imag(heltfDemod)'];
-            chanEstNNBased = zeros(size(chanEst));
+            [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
 
-            switch nnMode
-                case 0
-                    [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
-                    smoother = ds_smoother(heltfDemod,packetSNR,dsLookup(channelTypePrediction));
-                    % ZOH for edge effects
-                    chanEst_padded = [zeros(4,1); chanEst; zeros(4,1)];
-                    chanEst_padded(1:4)=chanEst(1);
-                    chanEst_padded(end-4:end)=chanEst(end);
-                    clean_est = filter(smoother,1,chanEst_padded);
-                    chanEstNNBased = clean_est(5:end-4);
-                case 1
-                    [~,channelTypePrediction] = max(predict(channel_classifier,nnInput));
-                    chanEstNN = squeeze(predict(estimators{channelTypePrediction},nnInput));
-                    chanEstNNBased = double(chanEstNN(1,:) - 1j*chanEstNN(2,:))';
-            end
-           
+            chanEstSmoother = apply_smoother(chanEstBaseline, packetSNR, dsLookup(channelTypePrediction)); % nn ch type smoother
+            chanEstGenieSmoother = apply_smoother(chanEstBaseline, packetSNR, dsLookup(sc_ind)); % cheating ch type smoother
+            chanEstMeanSmoother = apply_smoother(chanEstBaseline, packetSNR, 30e-9); % ch type C smoother
+            
+
+            chanEstNN = squeeze(predict(estimators{channelTypePrediction},nnInput)); % nn ch type + nn ch est
+            chanEstNN = double(chanEstNN(1,:) - 1j*chanEstNN(2,:))';
+            
+            chanEstGenieNN = squeeze(predict(estimators{sc_ind},nnInput)); % cheating ch type + nn ch est
+            chanEstGenieNN = double(chanEstGenieNN(1,:) - 1j*chanEstGenieNN(2,:))';
+            
+
+            predictions(c) = channelTypePrediction;
+            c = c + 1;
+            
             % Data demodulate - # symbols = # samples / (fftSize + CPSize)
             rxData = rx(pktOffset+(hedata_ind),:);
             demodSym = wlanHEDemodulate(rxData,'HE-Data',cfgHE);
-%% NN based demodulation and equalization
-            % Pilot phase tracking NN
-            demodSymNN = wlanHETrackPilotError(demodSym,chanEstNNBased,cfgHE,'HE-Data');
 
-            % Estimate noise power in HE fields NN
-            nVarEstNN = heNoiseEstimate(demodSymNN(pilot_ind,:,:),chanEstNNBased(pilot_ind),cfgHE);
-
-            % Extract data subcarriers from demodulated symbols and channel
-            % estimate NN
-            demodDataSymNN = demodSymNN(data_ind,:,:);
-            chanEstDataNN = chanEstNNBased(data_ind,:,:);
-            
-            % Equalization and STBC combining NN
-            [eqDataSymNN,csiNN] = heEqualizeCombine(demodDataSymNN,chanEstDataNN,nVarEstNN,cfgHE);
-            
-            % Recover data NN
-            rxPSDUNN = wlanHEDataBitRecover(eqDataSymNN,nVarEstNN,csiNN,cfgHE,'LDPCDecodingMethod','norm-min-sum');
-
-%% Original demodulation and equalization            
-            % Pilot phase tracking
-            demodSym = wlanHETrackPilotError(demodSym,chanEst,cfgHE,'HE-Data');            
-           
-            % Estimate noise power in HE fields
-            nVarEst = heNoiseEstimate(demodSym(pilot_ind,:,:),pilotEst,cfgHE);
-            
-            % Extract data subcarriers from demodulated symbols and channel
-            % estimate
-            demodDataSym = demodSym(data_ind,:,:);
-            chanEstData = chanEst(data_ind,:,:);
-
-            % Equalization and STBC combining
-            [eqDataSym,csi] = heEqualizeCombine(demodDataSym,chanEstData,nVarEst,cfgHE);
-
-            % Recover data
-            rxPSDU = wlanHEDataBitRecover(eqDataSym,nVarEst,csi,cfgHE,'LDPCDecodingMethod','norm-min-sum');
+            % demodulation and equalization
+            rxPSDUBaseline = getPSDU(demodSym, chanEstBaseline,cfgHE, pilot_ind, data_ind);
+            rxPSDUSmoother = getPSDU(demodSym, chanEstSmoother,cfgHE, pilot_ind, data_ind);
+            rxPSDUSmootherFixed = getPSDU(demodSym, chanEstSmootherFixed,cfgHE, pilot_ind, data_ind);
+            rxPSDUGenieSmoother = getPSDU(demodSym, chanEstGenieSmoother,cfgHE, pilot_ind, data_ind);
+            rxPSDUMeanSmoother = getPSDU(demodSym, chanEstMeanSmoother,cfgHE, pilot_ind, data_ind);            
+            rxPSDUNN = getPSDU(demodSym, chanEstNN,cfgHE, pilot_ind, data_ind);
+            rxPSDUGenieNN = getPSDU(demodSym, chanEstGenieNN,cfgHE, pilot_ind, data_ind);
 
 %% performance
-            % Determine if any bits are in error, i.e. a packet error NN
+            packetError = ~isequal(txPSDU,rxPSDUBaseline);
+            packetErrorSmoother = ~isequal(txPSDU,rxPSDUSmoother);
+            packetErrorSmootherFixed = ~isequal(txPSDU,rxPSDUSmootherFixed);
+            packetErrorGenieSmoother = ~isequal(txPSDU,rxPSDUGenieSmoother);
+            packetErrorMeanSmoother = ~isequal(txPSDU,rxPSDUMeanSmoother);
             packetErrorNN = ~isequal(txPSDU,rxPSDUNN);
-            % Determine if any bits are in error, i.e. a packet error
-            packetError = ~isequal(txPSDU,rxPSDU);
+            packetErrorGenieNN = ~isequal(txPSDU,rxPSDUGenieNN);                     
 
             if packetError
                 numPacketErrors = numPacketErrors+packetError;
             end
+            if packetErrorSmoother
+                numPacketErrorsSmoother = numPacketErrorsSmoother+packetErrorSmoother;
+            end
+            if packetErrorSmootherFixed
+                numPacketErrorsSmootherOrig = numPacketErrorsSmootherOrig+packetErrorSmootherFixed;
+            end
+            if packetErrorGenieSmoother
+                numPacketErrorsGenieSmoother = numPacketErrorsGenieSmoother+packetErrorGenieSmoother;
+            end
+            if packetErrorMeanSmoother
+                numPacketErrorsMeanSmoother = numPacketErrorsMeanSmoother+packetErrorMeanSmoother;
+            end
+            if packetErrorGenieNN
+                numPacketErrorsGenieClassifierNN = numPacketErrorsGenieClassifierNN+packetErrorGenieNN;
+            end
             if packetErrorNN
                 numPacketErrorsNN = numPacketErrorsNN+packetErrorNN;
             end
+            
             numPkt = numPkt+1;
         end
 
+        for class=1:6
+            confusionMatrix(isnr,sc_ind,class) = sum(predictions == class);
+        end
         % Calculate packet error rate (PER) at SNR point
-        packetErrorRate(isnr) = numPacketErrors/(numPkt-1);
-        disp(['MCS ' num2str(cfgHE.MCS) ','...
-            ' SNR ' num2str(snr(isnr)) ...
-            ' completed after ' num2str(numPkt-1) ' packets,'...
-            ' BL PER:' num2str(packetErrorRate(isnr))]);
-        % Calculate packet error rate (PER) at SNR point NN
-        packetErrorRateNN(isnr) = numPacketErrorsNN/(numPkt-1);
-        disp(['MCS ' num2str(cfgHE.MCS) ','...
-            ' SNR ' num2str(snr(isnr)) ...
-            ' completed after ' num2str(numPkt-1) ' packets,'...
-            ' NN PER:' num2str(packetErrorRateNN(isnr))]);
+        packetErrorRateBaseline(isnr) = numPacketErrors/(numPkt-1);
+        packetErrorRateNnSmoother(isnr) = numPacketErrorsSmoother/(numPkt-1);
+        packetErrorRateNn(isnr) = numPacketErrorsNN/(numPkt-1);
+        packetErrorRateGenieSmoother(isnr) = numPacketErrorsGenieSmoother/(numPkt-1);
+        packetErrorRateGenieClassifierNN(isnr) = numPacketErrorsGenieClassifierNN/(numPkt-1);
+        packetErrorRateMeanSmoother(isnr) = numPacketErrorsMeanSmoother/(numPkt-1);
+        packetErrorRateSmootherOrig(isnr) = numPacketErrorsSmootherOrig/(numPkt-1);
     end
 
     if plot_perf
-        plot_performance(snr,packetErrorRate,packetErrorRateNN,nnMode,scenario)
+        plot_performance(snr, ...
+            packetErrorRateBaseline, ...
+            packetErrorRateNn, ...
+            packetErrorRateNnSmoother, ...
+            packetErrorRateSmootherOrig, ...
+            packetErrorRateMeanSmoother, ...
+            packetErrorRateGenieClassifierNN, ...
+            packetErrorRateGenieSmoother, ...
+            scenario);
     end
 end
+plot_confusion_matrix(snr, confusionMatrix);

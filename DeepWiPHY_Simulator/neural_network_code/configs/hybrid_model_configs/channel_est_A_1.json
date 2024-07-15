@@ -1,7 +1,7 @@
 {
   "manualSeed": 9876,
   "mu": 0.001,
-  "batchSize": 128,
+  "batchSize": 256,
   "trainingIterations": 40,
   "nodeCounts": {
     "conv1": {
@@ -16,7 +16,7 @@
     },
     "conv2": {
       "input_channels": 32,
-      "output_channels": 16,
+      "output_channels": 32,
       "kernel_size": 5
     },
     "aFunc2": "relu",
@@ -27,11 +27,11 @@
     "view1": {
       "args": [
         -1,
-        912
+        1824
       ]
     },
     "fc1": {
-      "input_dim": 912,
+      "input_dim": 1824,
       "output_dim": 512
     },
     "aFunc3": "tanh",

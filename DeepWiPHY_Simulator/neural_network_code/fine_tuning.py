@@ -141,7 +141,9 @@ def train_test_ch_est_model(
     model = model.to(device)
     log.info(summary(model, (2, 242)))
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=configuration.mu, weight_decay=configuration.w_decay
+        model.parameters(),
+        lr=configuration.mu,
+        weight_decay=configuration.w_decay
     )
     scheduler = ExponentialLR(optimizer, 0.9)
     early_stopper = EarlyStopping()
@@ -150,7 +152,7 @@ def train_test_ch_est_model(
                                         t + 1) if model_type == ModelType.channelClassifier else training_loop(
             train_data_loader,
             model, optimizer)
-        visualize_res = False # if (t + 1) % 40 == 0 or t == configuration.training_iterations - 1 else False
+        visualize_res = True if (t + 1) % 40 == 0 or t == configuration.training_iterations - 1 else False
         curr_test_loss, test_acc = validation(model,
                                               test_data_loader) if model_type == ModelType.channelClassifier else validation_loop(
             test_data_loader, model, model_type, plot=visualize_res)
@@ -238,14 +240,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     log.info(f"Device: {device}\nStarting session...")
     config_dir = (
-        "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/neural_network_code/configs/delay_spread_configs"
+        "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/neural_network_code/configs/hybrid_model_configs"
     )
     configs = [
         f
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
-        if f.endswith(".json")  # and "channel_est" in f
+        if f.endswith(".json") and "channel_est" in f
     ]
-    sub_size = int(150e3)
+    sub_size = -1
     test_percentage = 0.2
     for config_path in configs:
         config_name = os.path.split(config_path)[-1].replace(".json", "")

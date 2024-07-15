@@ -1,8 +1,7 @@
-function [equalizer] = ds_smoother(heLTFDemodDataSCs,SNR, rms_ds)
+function [equalizer] = ds_smoother(SNR, rms_ds, Nc)
 %% Params
-sigma_a = std(heLTFDemodDataSCs);                       % signal std, should be 1 (assuming UnitAveragePower above was set to 1)
-Nh = 5;                                                 % number of channel taps - to produce correlation between the LTF SCs. Currently set to delta, so there is no correlation, delay spready is inf (or very big), and smoother should be delta!
-Nc = 5;                                                 % Smoother taps
+sigma_a = 1;                                            % signal std, should be 1 (assuming UnitAveragePower above was set to 1)
+Nh = Nc;                                                % number of channel taps - to produce correlation between the LTF SCs. Currently set to delta, so there is no correlation, delay spready is inf (or very big), and smoother should be delta!
 Nrx = 1;                                                % number of rx antennas
 %% Generate Signals
 sigma_w = sigma_a*10^(-SNR/20);                         % noise std
