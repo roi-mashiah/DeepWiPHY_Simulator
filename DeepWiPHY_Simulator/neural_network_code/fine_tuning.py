@@ -44,7 +44,7 @@ def training_loop(data_loader: DataLoader, model, optimizer):
     return losses, train_acc
 
 
-def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=True):
+def validation_loop(dataloader, model, model_type: ModelType, epoch, plot=False, save=True):
     model.eval()
     num_batches = len(dataloader)
     test_loss = 0
@@ -60,7 +60,8 @@ def validation_loop(dataloader, model, model_type: ModelType, plot=False, save=T
             curr_loss = model.criterion(pred, y).item()
             test_loss += curr_loss
             if plot and i == num_batches - 1:
-                plot_channel_reconstruction(y.cpu(), pred.cpu(), baseline_ch_est, packet_info, writer, config_name)
+                plot_channel_reconstruction(y.cpu(), pred.cpu(), baseline_ch_est, packet_info, writer, config_name,
+                                            False, epoch)
             if model_type == ModelType.delaySpreadEst:
                 test_acc += calc_accuracy(y, pred).item()
                 # baseline_ch_est is the gt CIR, X is HE-LTF, y is gt RMS DS
@@ -140,22 +141,23 @@ def train_test_ch_est_model(
     model.model_type = model_type
     model = model.to(device)
     log.info(summary(model, (2, 242)))
+    log.info(f"Number of training examples: {len(train_data_loader) * configuration.batch_size}")
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=configuration.mu,
         weight_decay=configuration.w_decay
     )
-    scheduler = ExponentialLR(optimizer, 0.9)
+    scheduler = ExponentialLR(optimizer, 1)
     early_stopper = EarlyStopping()
     for t in range(configuration.training_iterations):
         curr_tr_loss, train_acc = train(model, train_data_loader, optimizer,
                                         t + 1) if model_type == ModelType.channelClassifier else training_loop(
             train_data_loader,
             model, optimizer)
-        visualize_res = True if (t + 1) % 40 == 0 or t == configuration.training_iterations - 1 else False
+        visualize_res = True # if (t + 1) % 2 == 0 or t == configuration.training_iterations - 1 else False
         curr_test_loss, test_acc = validation(model,
                                               test_data_loader) if model_type == ModelType.channelClassifier else validation_loop(
-            test_data_loader, model, model_type, plot=visualize_res)
+            test_data_loader, model, model_type, t, plot=visualize_res)
 
         writer.add_scalars(f"Loss Graph - {config_name}",
                            {
@@ -193,11 +195,12 @@ def get_data_loaders(config: Configuration):
             wiphy_dataset, sub_size, test_percentage
         )
         ref_seq = wiphy_dataset.ref_seq
+    log.info(str(train_dataset))
     train_loader = DataLoader(
-        train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
+        train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4, drop_last=True
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4
+        test_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4, drop_last=True
     )
     return train_loader, test_loader, ref_seq
 
@@ -211,6 +214,7 @@ def save_model(model):
 
 def inference(config_path):
     config = load_config(config_path, log)
+    config.data_path = "/mnt/deepWiPhyData/jsonfiles"
     torch.manual_seed(config.manual_seed)
     state_path = path.join(results_dir, config_name + ".pt")
     train_loader, test_loader, sequence = get_data_loaders(config)
@@ -218,11 +222,12 @@ def inference(config_path):
     model.load_state_dict(torch.load(state_path))
     model = model.to(device)
     model_type = ModelType[config.model_type]
-    validation_loop(test_loader, model, model_type, plot=True, save=False)
+    validation_loop(test_loader, model, model_type, 0, plot=True, save=False)
 
 
 def main_loop(config_path):
     config = load_config(config_path, log)
+    config.data_path = "/mnt/deepWiPhyData/jsonfiles"
     torch.manual_seed(config.manual_seed)
     train_loader, test_loader, sequence = get_data_loaders(config)
     log.info(f"Start training model {config_name}...")
@@ -234,7 +239,7 @@ def main_loop(config_path):
 
 if __name__ == "__main__":
     tb_log_dir = f"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/runs/{int(datetime.now().timestamp())}"
-    results_dir = rf"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results"
+    results_dir = rf"/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/results_mcs"
     writer = SummaryWriter(tb_log_dir, flush_secs=5)
     log = init_logger()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -247,8 +252,8 @@ if __name__ == "__main__":
         for f in glob(f"{config_dir}/**/*.json", recursive=True)
         if f.endswith(".json") and "channel_est" in f
     ]
-    sub_size = -1
-    test_percentage = 0.2
+    sub_size = 10000
+    test_percentage = 0.15
     for config_path in configs:
         config_name = os.path.split(config_path)[-1].replace(".json", "")
         # if config_name + '.pt' in os.listdir(results_dir):

@@ -48,6 +48,12 @@ class WiPhyDataset(Dataset):
             self.packets = test_samples
         self.packets.reset_index(drop=True, inplace=True)
 
+    def __repr__(self):
+        snr_dict = {}
+        for snr, snr_df in self.packets.groupby("snr"):
+            snr_dict[int(snr)] = snr_df.shape[0]
+        return f"Channel {self.configuration.ch_type}\n{json.dumps(snr_dict, indent=4)}"
+
     def __len__(self):
         return len(self.packets)
 
@@ -60,33 +66,15 @@ class WiPhyDataset(Dataset):
 
         packet["group"] = (np.arange(242) // self.configuration.group_size) + 1
         group_mask = packet["group"] == 1
-        packet["channel_est_real"] = packet["channel_est_real"]
-        packet["channel_est_imag"] = packet["channel_est_imag"]
-        he_ltf = torch.from_numpy(
-            np.vstack(
-                (
-                    np.array(packet["HE_LTF_real"], dtype=np.double),
-                    np.array(packet["HE_LTF_imag"], dtype=np.double)
-                )
-            )
-        )
-        # he_ltf initial size is (2, 242)
-        channel = torch.from_numpy(
-            np.vstack(
-                (
-                    np.array(packet["channel_taps_real"], dtype=np.double)[group_mask],
-                    np.array(packet["channel_taps_imag"], dtype=np.double)[group_mask],
-                )
-            )
-        )
-        channel_est = torch.from_numpy(
-            np.vstack(
-                (
-                    np.array(packet["channel_est_real"], dtype=np.double)[group_mask],
-                    np.array(packet["channel_est_imag"], dtype=np.double)[group_mask],
-                )
-            )
-        )
+
+        complex_ltf = self.complex_cartesian_rep(packet, "HE_LTF", group_mask)
+        complex_channel = self.complex_cartesian_rep(packet, "channel_taps", group_mask)
+        complex_channel_est = self.complex_cartesian_rep(packet, "channel_est", group_mask)
+
+        he_ltf = self.polar_coord_representation(complex_ltf)
+        channel = self.polar_coord_representation(complex_channel)
+        channel_est = self.polar_coord_representation(complex_channel_est)
+
         if self.transform:
             he_ltf = self.transform(he_ltf)
         if self.target_transform:
@@ -109,6 +97,22 @@ class WiPhyDataset(Dataset):
             "/home/tauproj3/Documents/DeepWiPHY_Simulator/DeepWiPHY_Simulator/HE_LTF_SEQ.csv"
         )
         return sequence_df["seq"].values
+
+    @staticmethod
+    def complex_cartesian_rep(packet, key, mask):
+        return np.array(packet[f"{key}_real"], dtype=np.double)[mask] + 1j * \
+            np.array(packet[f"{key}_imag"], dtype=np.double)[mask]
+
+    @staticmethod
+    def polar_coord_representation(cart):
+        return torch.from_numpy(
+            np.vstack(
+                (
+                    np.absolute(cart),
+                    np.angle(cart),
+                )
+            )
+        )
 
     @staticmethod
     def parse_filename(filename):
