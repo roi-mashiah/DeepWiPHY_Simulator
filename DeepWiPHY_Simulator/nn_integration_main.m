@@ -25,9 +25,15 @@ estimators = {s.channel_est_A_1,...
 dsLookup = [0    15    30    50   100   150].*1e-9;
 %% global configs and preallocs
 save_scenario = 0;
-maxNumPackets = 1000;
+maxNumPackets = 10;
 maxNumErrors = 0.2*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 10:2:24;
+
+snr = (29):0.5:(32+3+2);
+% min snr = 5 dB @ mcs 0 -> for mcs 8 we need 8 levels * 3dB = 24dB + 5 = 29dB
+% +-2dB for more points
+mcs = ones(size(snr)) * 8;
+mcs(mcs >= 32) = 9;
+
 numSNR = numel(snr); % Number of SNR points
 
 packetErrorRateBaseline = zeros(1,numSNR);
@@ -41,33 +47,33 @@ packetErrorRateMeanSmoother = zeros(1,numSNR);
 confusionMatrix = zeros(numSNR,6,6);
 
 plot_perf=1;
-delete(gcp("nocreate"))
-parpool('local',8);
+% delete(gcp("nocreate"))
+% parpool('local',8);
 
-for sc_ind = 1:numel(scenarios)
+for sc_ind = 5%:numel(scenarios)
     scenario = scenarios{sc_ind};
-    cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
     chanBW = scenario.tx.HE_config.ChannelBandwidth;    
-
-    % Get occupied subcarrier indices and OFDM parameters
-    ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
     fs = tgaxChannel.SampleRate;
     Ts = 1/fs;
-    % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
-    ind = wlanFieldIndices(cfgHE);
-    seed = scenario.seed;
-    fftLength = ofdmInfo.FFTLength;
-    numTones = ofdmInfo.NumTones;
-    lstf_ind = ind.LSTF(1):ind.LSTF(2);
-    nonht_ind = ind.LSTF(1):ind.LSIG(2);
-    lltf_ind = ind.LLTF(1):ind.LLTF(2);
-    heltf_ind = ind.HELTF(1):ind.HELTF(2);
-    hedata_ind = ind.HEData(1):ind.HEData(2);
-    pilot_ind = ofdmInfo.PilotIndices;
-    data_ind = ofdmInfo.DataIndices;
-
-    parfor isnr = 1:numSNR
+    for isnr = 1:numSNR
+        cfgHE = scenario.tx.HE_config;
+        cfgHE.MCS = mcs(isnr);
+        % Get occupied subcarrier indices and OFDM parameters
+        ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
+        % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
+        ind = wlanFieldIndices(cfgHE);
+        seed = scenario.seed;
+        fftLength = ofdmInfo.FFTLength;
+        numTones = ofdmInfo.NumTones;
+        lstf_ind = ind.LSTF(1):ind.LSTF(2);
+        nonht_ind = ind.LSTF(1):ind.LSIG(2);
+        lltf_ind = ind.LLTF(1):ind.LLTF(2);
+        heltf_ind = ind.HELTF(1):ind.HELTF(2);
+        hedata_ind = ind.HEData(1):ind.HEData(2);
+        pilot_ind = ofdmInfo.PilotIndices;
+        data_ind = ofdmInfo.DataIndices;
+        
         % Set random substream index per iteration to ensure that each
         % iteration uses a repeatable set of random numbers
         stream = RandStream('combRecursive','Seed',seed);
@@ -119,7 +125,7 @@ for sc_ind = 1:numel(scenarios)
             end
 
             chanEstBaseline = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % no smoother
-            chanEstSmootherFixed = wlanHELTFChannelEstimate(heltfDemod,cfgHE, "FrequencySmoothingSpan",5); % all ones
+            chanEstSmootherFixed = wlanHELTFChannelEstimate(heltfDemod,cfgHE, "FrequencySmoothingSpan",9); % all ones
 
             % predict channel using neural networks
             nnInput = [real(heltfDemod)' ; imag(heltfDemod)'];
@@ -202,6 +208,7 @@ for sc_ind = 1:numel(scenarios)
 
     if plot_perf
         plot_performance(snr, ...
+            mcs, ...
             packetErrorRateBaseline, ...
             packetErrorRateNn, ...
             packetErrorRateNnSmoother, ...
@@ -212,4 +219,4 @@ for sc_ind = 1:numel(scenarios)
             scenario);
     end
 end
-plot_confusion_matrix(snr, confusionMatrix);
+% plot_confusion_matrix(snr, confusionMatrix);

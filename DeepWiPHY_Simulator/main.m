@@ -12,32 +12,37 @@ end
 
 %% global configs and preallocs
 save_scenario = 1;
-maxNumPackets = 10000;
-maxNumErrors = 0.5*maxNumPackets;   % The maximum number of packet errors at an SNR point
-snr = 12:4:40;
-%snr=[30:35];
-% snr = 12:2:20;
+maxNumPackets = 10e3;
+maxNumErrors = 0.2*maxNumPackets;   % The maximum number of packet errors at an SNR point
+
+snr = (29-2):0.5:(32+3+2);
+% min snr = 5 dB @ mcs 0 -> for mcs 8 we need 8 levels * 3dB = 24dB + 5 = 29dB
+% +-2dB for more points
+mcs = ones(size(snr)) * 8;
+mcs(mcs >= 32) = 9;
+
 numSNR = numel(snr); % Number of SNR points
 packetErrorRate = zeros(1,numSNR);
-plot_ch = 0; plot_symb = 0; plot_perf=0;
+plot_ch = 0; plot_symb = 0; plot_perf=1;
 output_data_dir = "/home/tauproj3/data/deepWiPhyData/matfiles";
 
-for sc_ind = 1:numel(scenarios)
+for sc_ind = 5:numel(scenarios)
     scenario = scenarios{sc_ind};
-    cfgHE = scenario.tx.HE_config;
     tgaxChannel = scenario.tx.tgax_channel;
     chanBW = scenario.tx.HE_config.ChannelBandwidth;
     scenario.tx.numPackets = maxNumPackets;
-
-    % Get occupied subcarrier indices and OFDM parameters
-    ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
-    scenario.tx.ofdmInfo = ofdmInfo;
     fs = tgaxChannel.SampleRate;
     Ts = 1/fs;
-    % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
-    ind = wlanFieldIndices(cfgHE);
-    
+
     for isnr = 1:numSNR
+        cfgHE = scenario.tx.HE_config;
+        % Get occupied subcarrier indices and OFDM parameters
+        ofdmInfo = wlanHEOFDMInfo('HE-Data',cfgHE);
+        scenario.tx.ofdmInfo = ofdmInfo;
+        % Indices to extract fields from the PPDU-returns a struct with indices of the different fields - ex: ind.HELTF = [a b]
+        ind = wlanFieldIndices(cfgHE);
+
+
         % Set random substream index per iteration to ensure that each
         % iteration uses a repeatable set of random numbers
         stream = RandStream('combRecursive','Seed',scenario.seed);
@@ -68,9 +73,9 @@ for sc_ind = 1:numel(scenarios)
             clean_rx = rx;
             [gtChanEst, gtPilotEst] = get_gt_channel(clean_rx, chanBW, fs,ind, cfgHE);
             scenario.gt.channel_taps_gt{numPkt} = gtChanEst;
-            scenario.gt.rms_delay_spread{numPkt} = 0; % not needed 
+            scenario.gt.rms_delay_spread{numPkt} = 0; % not needed
 
-            
+
             % Pass the waveform through AWGN channel
             rx = awgn(rx,packetSNR); % noisy IQ RX signal
 
@@ -86,7 +91,7 @@ for sc_ind = 1:numel(scenarios)
             lstf = rx(coarsePktOffset+(ind.LSTF(1):ind.LSTF(2)),:);
             coarseFreqOff = wlanCoarseCFOEstimate(lstf,chanBW);
             rx = frequencyOffset(rx,fs,-coarseFreqOff); % Matlab 2022A complient
-                        
+
             % Extract the non-HT fields and determine fine packet offset
             nonhtfields = rx(coarsePktOffset+(ind.LSTF(1):ind.LSIG(2)),:);
             finePktOffset = wlanSymbolTimingEstimate(nonhtfields,chanBW);
@@ -111,7 +116,7 @@ for sc_ind = 1:numel(scenarios)
             rxHELTF = rx(pktOffset+(ind.HELTF(1):ind.HELTF(2)),:); % time sig
             heltfDemod = wlanHEDemodulate(rxHELTF,'HE-LTF',cfgHE); % freq domain samples of HE-LTF
             [chanEst,pilotEst] = wlanHELTFChannelEstimate(heltfDemod,cfgHE); % freq domain channel estimation
-                        
+
             % log HE-LTF data for training, channel estimation for
             % reference and comparisons
             scenario.rx.HE_LTF{numPkt} = heltfDemod;
